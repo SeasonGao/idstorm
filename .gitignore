@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+backend/.env
+
+# Build
+frontend/dist/
+
+# Generated images
+backend/.generated_images/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OMC state
+.omc/state/
+.omc/plans/
+.omc/specs/
+.omc/notepad.md
+.omc/project-memory.json
+.omc/research/
+.omc/logs/
