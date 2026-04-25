@@ -7,8 +7,9 @@ Integrates with DeepSeek LLM for natural language understanding.
 
 import json
 import logging
-import uuid
-from typing import AsyncGenerator
+import threading
+from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -17,6 +18,19 @@ from app.models.dialogue import Message
 from app.models.session import Session
 
 logger = logging.getLogger(__name__)
+
+LOG_DIR = Path("logs/dialogue")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_request_counter = 0
+_counter_lock = threading.Lock()
+
+
+def _next_request_id() -> str:
+    global _request_counter
+    with _counter_lock:
+        _request_counter += 1
+        return f"req{_request_counter:04d}"
 
 DIMENSIONS = ["form_size", "material_color", "scenario", "brand"]
 
@@ -90,20 +104,17 @@ SYSTEM_PROMPT_TEMPLATE = r"""你是 IDStorm，一位专业的工业设计顾问�
 
 
 def _count_substantive_details(text: str, dimension: str) -> int:
-    """Count how many dimension-specific substantive details are in the text."""
     count = 0
     text_lower = text.lower()
     for keyword in DIMENSION_KEYWORDS.get(dimension, []):
         if keyword in text_lower:
             count += 1
-    # Long responses count as substantive even without keywords
     if len(text.strip()) > 20:
         count += 1
     return count
 
 
 def _is_dimension_saturated(session: Session, dimension: str) -> bool:
-    """Heuristic: dimension is saturated when user has provided 2+ substantive details."""
     user_messages = [
         m for m in session.messages
         if m.role == "user" and m.content.strip()
@@ -115,19 +126,15 @@ def _is_dimension_saturated(session: Session, dimension: str) -> bool:
 
 
 def _advance_dimension(session: Session) -> None:
-    """Advance to the next dimension if current one is saturated."""
     if _is_dimension_saturated(session, session.current_dimension):
         if session.current_dimension not in session.completed_dimensions:
             session.completed_dimensions.append(session.current_dimension)
         current_idx = DIMENSIONS.index(session.current_dimension)
         if current_idx < len(DIMENSIONS) - 1:
             session.current_dimension = DIMENSIONS[current_idx + 1]
-        # If all dimensions are done, dialogue_complete stays False here;
-        # the check for [DESIGN_SUMMARY_READY] handles final completion.
 
 
 def force_advance_dimension(session: Session) -> bool:
-    """Force-advance to the next dimension. Returns True if all dimensions done."""
     if session.current_dimension not in session.completed_dimensions:
         session.completed_dimensions.append(session.current_dimension)
     current_idx = DIMENSIONS.index(session.current_dimension)
@@ -140,21 +147,15 @@ def force_advance_dimension(session: Session) -> bool:
 
 
 def _build_system_prompt(session: Session) -> str:
-    """Build the system prompt with current dimension context."""
     label = DIMENSION_LABELS.get(session.current_dimension, "")
-    return SYSTEM_PROMPT_TEMPLATE.replace("{current_dimension_label}", label)
+    prompt = SYSTEM_PROMPT_TEMPLATE.replace("{current_dimension_label}", label)
+    if session.initial_idea:
+        prompt += f"\n\n用户的初始创意：{session.initial_idea}"
+    return prompt
 
 
 def _build_messages(session: Session) -> list[dict]:
-    """Build the messages list for the DeepSeek API call."""
     messages = [{"role": "system", "content": _build_system_prompt(session)}]
-    # Include initial idea as context if available
-    if session.initial_idea:
-        messages.append({
-            "role": "system",
-            "content": f"用户的初始创意：{session.initial_idea}",
-        })
-    # Add conversation history (keep last N rounds to avoid token overflow)
     history = session.messages[-10:]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
@@ -162,7 +163,6 @@ def _build_messages(session: Session) -> list[dict]:
 
 
 def _get_dimension_progress(session: Session) -> dict:
-    """Build dimension progress dict for SSE metadata."""
     current_dim = session.current_dimension
     completed = list(session.completed_dimensions)
     remaining = [d for d in DIMENSIONS if d not in completed and d != current_dim]
@@ -173,14 +173,11 @@ def _get_dimension_progress(session: Session) -> dict:
     }
 
 
-async def chat(
-    session: Session,
-    user_message: str,
-) -> AsyncGenerator[str, None]:
-    """Get a dialogue response via DeepSeek API using JSON Mode, yielding SSE-formatted events."""
+async def chat(session: Session, user_message: str) -> dict[str, Any]:
     _advance_dimension(session)
     api_messages = _build_messages(session)
 
+    request_id = _next_request_id()
     max_retries = 3
     raw_content = ""
 
@@ -188,8 +185,17 @@ async def chat(
         try:
             current_messages = [dict(m) for m in api_messages]
             if attempt > 0:
-                nonce = uuid.uuid4().hex[:8]
+                nonce = f"retry{attempt}"
                 current_messages[0]["content"] += f"\n\n[会话标识:{nonce}]"
+
+            log_file = LOG_DIR / f"{request_id}_attempt{attempt + 1}.json"
+            request_payload = {
+                "model": settings.deepseek_model,
+                "messages": current_messages,
+                "max_tokens": 1024,
+                "temperature": 1.0 if attempt > 0 else 0.3,
+                "response_format": {"type": "json_object"},
+            }
 
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=10.0),
@@ -200,54 +206,63 @@ async def chat(
                         "Authorization": f"Bearer {settings.deepseek_api_key}",
                         "Content-Type": "application/json",
                     },
-                    json={
-                        "model": settings.deepseek_model,
-                        "messages": current_messages,
-                        "max_tokens": 1024,
-                        "temperature": 1.0 if attempt > 0 else 0.3,
-                        "response_format": {"type": "json_object"},
-                    },
+                    json=request_payload,
                 )
 
+                raw_response = response.text
+
                 if response.status_code != 200:
+                    log_file.write_text(json.dumps({
+                        "request": request_payload,
+                        "raw_response": raw_response,
+                        "response": response,
+                    }, ensure_ascii=False, indent=2), encoding="utf-8")
                     logger.error("DeepSeek API error %d: %s", response.status_code, response.text)
-                    yield f"event: error\ndata: {json.dumps({'code': 'api_error', 'message': f'API返回错误 ({response.status_code})'}, ensure_ascii=False)}\n\n"
-                    return
+                    return {"code": "api_error", "message": f"API返回错误 ({response.status_code})"}
 
                 result = response.json()
                 raw_content = result["choices"][0]["message"]["content"]
 
         except httpx.TimeoutException:
             logger.error("DeepSeek API timeout")
-            yield f"event: error\ndata: {json.dumps({'code': 'timeout', 'message': '请求超时，请重试'}, ensure_ascii=False)}\n\n"
-            return
+            return {"code": "timeout", "message": "请求超时，请重试"}
         except httpx.ConnectError:
             logger.error("DeepSeek API connection error")
-            yield f"event: error\ndata: {json.dumps({'code': 'connection_error', 'message': '无法连接到AI服务'}, ensure_ascii=False)}\n\n"
-            return
+            return {"code": "connection_error", "message": "无法连接到AI服务"}
         except Exception as e:
             logger.exception("Unexpected error during DeepSeek API call")
-            yield f"event: error\ndata: {json.dumps({'code': 'internal_error', 'message': '对话服务暂时不可用，请重试'}, ensure_ascii=False)}\n\n"
-            return
+            return {"code": "internal_error", "message": "对话服务暂时不可用，请重试"}
 
-        logger.info("[DIALOGUE] Attempt %d, Raw JSON response: %s", attempt + 1, raw_content[:300])
-        logger.info("[DIALOGUE] Attempt %d, repr: %s", attempt + 1, repr(raw_content[:200]))
+        # logger.info("[DIALOGUE] Attempt %d, Raw JSON response: %s", attempt + 1, raw_content[:300])
+        # logger.info("[DIALOGUE] Attempt %d, repr: %s", attempt + 1, repr(raw_content[:200]))
 
         try:
             parsed = json.loads(raw_content)
             content = parsed.get("content", "")
             if content.strip():
+                result_data = parsed
+                log_file.write_text(json.dumps({
+                    "request": request_payload,
+                    "parsed": parsed,
+                    "raw_content": raw_content,
+                    "result": result,
+                }, ensure_ascii=False, indent=2), encoding="utf-8")
                 break
             logger.warning("[DIALOGUE] Empty content on attempt %d, retrying...", attempt + 1)
         except json.JSONDecodeError:
+            log_file.write_text(json.dumps({
+                "request": request_payload,
+                "raw_content": raw_content,
+                "result": result,
+                "parse_error": True,
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
             logger.warning("[DIALOGUE] Invalid JSON on attempt %d, retrying...", attempt + 1)
     else:
         logger.error("[DIALOGUE] All %d attempts failed", max_retries)
-        yield f"event: error\ndata: {json.dumps({'code': 'parse_error', 'message': 'AI返回格式异常，请重试'}, ensure_ascii=False)}\n\n"
-        return
+        return {"code": "parse_error", "message": "AI返回格式异常，请重试"}
 
-    options = parsed.get("options")
-    design_complete = parsed.get("design_complete", False)
+    options = result_data.get("options")
+    design_complete = result_data.get("design_complete", False)
 
     if design_complete:
         for dim in DIMENSIONS:
@@ -257,36 +272,10 @@ async def chat(
 
     dialogue_complete = len(session.completed_dimensions) >= len(DIMENSIONS) and design_complete
 
-    # Emit metadata
-    metadata = {
-        "dimension_progress": _get_dimension_progress(session),
-        "dialogue_complete": dialogue_complete,
-    }
-    yield f"event: metadata\ndata: {json.dumps(metadata, ensure_ascii=False)}\n\n"
-
-    # Simulate streaming by yielding content in chunks
-    chunk_size = 4
-    for i in range(0, len(content), chunk_size):
-        chunk = content[i:i + chunk_size]
-        yield f"event: token\ndata: {json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
-
-    if dialogue_complete:
-        final_metadata = {
-            "dimension_progress": _get_dimension_progress(session),
-            "dialogue_complete": True,
-        }
-        yield f"event: metadata\ndata: {json.dumps(final_metadata, ensure_ascii=False)}\n\n"
-
-    if options:
-        yield f"event: options\ndata: {json.dumps(options, ensure_ascii=False)}\n\n"
-
-    done_data = {
-        "message": {
-            "role": "assistant",
-            "content": content,
-        },
+    return {
+        "content": content,
         "options": options,
-        "dimension_progress": _get_dimension_progress(session),
+        "design_complete": design_complete,
         "dialogue_complete": dialogue_complete,
+        "dimension_progress": _get_dimension_progress(session),
     }
-    yield f"event: done\ndata: {json.dumps(done_data, ensure_ascii=False)}\n\n"
