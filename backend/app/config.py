@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     doubao_api_key: str = ""
     doubao_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
     doubao_model: str = "doubao-seedream-5-0-260128"
-    doubao_image_size: str = "1024x1024"
+    doubao_image_size: str = "2K"
     # Default image provider: "doubao" or "openai"
     default_image_provider: str = "doubao"
 

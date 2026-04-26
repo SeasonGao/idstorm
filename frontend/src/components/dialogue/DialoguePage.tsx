@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "../../hooks/useSession";
 import { useChat } from "../../hooks/useChat";
 import { API_BASE, DIMENSION_LABELS } from "../../utils/constants";
@@ -12,13 +12,38 @@ interface DialoguePageProps {
 
 export default function DialoguePage({ onComplete }: DialoguePageProps) {
   const { sessionId, status, setStatus, createSession, resetSession } = useSession();
-  const { messages, isStreaming, dimensionProgress, dialogueComplete, sendMessage, skipToNext } = useChat((code) => {
+  const { messages, setMessages, isStreaming, dimensionProgress, setDimensionProgress, dialogueComplete, setDialogueComplete, sendMessage, skipToNext } = useChat((code) => {
     if (code === "not_found") {
       resetSession();
       setError("会话已过期，请重新开始对话。");
     }
   });
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const loadHistory = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/dialogue/history/${sessionId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const historyMessages = data.messages.map((m: { role: string; content: string; options?: string[] | null }) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          options: m.options ?? undefined,
+        }));
+        setMessages(historyMessages);
+        if (data.dimension_progress) setDimensionProgress(data.dimension_progress);
+        if (typeof data.dialogue_complete === "boolean") setDialogueComplete(data.dialogue_complete);
+      } catch {
+        // ignore, user can start fresh
+      }
+    };
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [sessionId, setMessages, setDimensionProgress, setDialogueComplete]);
 
   const _ensureSession = async (content: string): Promise<string> => {
     if (sessionId) return sessionId;
@@ -72,7 +97,6 @@ export default function DialoguePage({ onComplete }: DialoguePageProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Dimension progress badges */}
       {dimensionProgress && (
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2">
           <span className="text-xs text-gray-500 mr-1">探索维度：</span>
@@ -100,7 +124,6 @@ export default function DialoguePage({ onComplete }: DialoguePageProps) {
         </div>
       )}
 
-      {/* Chat area */}
       <ChatWindow
         messages={messages}
         isStreaming={isStreaming}
@@ -108,12 +131,10 @@ export default function DialoguePage({ onComplete }: DialoguePageProps) {
         onOptionMultiConfirm={handleOptionMultiConfirm}
       />
 
-      {/* Error */}
       {error && (
         <div className="px-4 py-1 text-xs text-red-500">{error}</div>
       )}
 
-      {/* Dialogue complete action */}
       {dialogueComplete && !isStreaming ? (
         <div className="flex justify-center border-t border-gray-200 bg-white px-4 py-3">
           <Button onClick={onComplete}>
@@ -121,7 +142,6 @@ export default function DialoguePage({ onComplete }: DialoguePageProps) {
           </Button>
         </div>
       ) : (
-        /* Input area with skip button */
         <>
           <ChatInput onSend={handleSend} disabled={isStreaming} />
           {!isStreaming && sessionId && (

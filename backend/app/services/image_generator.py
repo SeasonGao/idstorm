@@ -38,6 +38,16 @@ async def _generate_doubao(prompt: str) -> tuple[str, str]:
     """
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
+    payload = {
+        "model": settings.doubao_model,
+        "prompt": prompt,
+        "sequential_image_generation": "disabled",
+        "response_format": "url",
+        "size": settings.doubao_image_size,
+        "stream": False,
+        "watermark": True,
+    }
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             f"{settings.doubao_base_url}/images/generations",
@@ -45,16 +55,10 @@ async def _generate_doubao(prompt: str) -> tuple[str, str]:
                 "Authorization": f"Bearer {settings.doubao_api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": settings.doubao_model,
-                "prompt": prompt,
-                "sequential_image_generation": "disabled",
-                "response_format": "url",
-                "size": settings.doubao_image_size,
-                "stream": False,
-                "watermark": True,
-            },
+            json=payload,
         )
+        if response.status_code != 200:
+            logger.error("[DOUBAO] status=%s body=%s", response.status_code, response.text[:500])
         response.raise_for_status()
         result = response.json()
 

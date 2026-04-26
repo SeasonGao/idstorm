@@ -131,5 +131,5 @@ export function useChat(onSessionError?: (code: string) => void) {
     }
   }, []);
 
-  return { messages, setMessages, isStreaming, dimensionProgress, dialogueComplete, sendMessage, skipToNext };
+  return { messages, setMessages, isStreaming, dimensionProgress, setDimensionProgress, dialogueComplete, setDialogueComplete, sendMessage, skipToNext };
 }
