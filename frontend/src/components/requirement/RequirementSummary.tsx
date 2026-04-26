@@ -2,7 +2,6 @@ import Button from "../common/Button";
 
 interface RequirementSummaryProps {
   dimensionCount: number;
-  fieldCount: number;
   version: number;
   onProceed: () => void;
   onBack: () => void;
@@ -10,7 +9,6 @@ interface RequirementSummaryProps {
 
 export default function RequirementSummary({
   dimensionCount,
-  fieldCount,
   version,
   onProceed,
   onBack,
@@ -20,7 +18,7 @@ export default function RequirementSummary({
       <div className="mx-auto flex max-w-5xl items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-500">
-            共{dimensionCount}个维度，{fieldCount}个字段
+            共{dimensionCount}个维度
           </span>
           <span className="text-xs text-gray-400">版本 v{version}</span>
         </div>
@@ -29,7 +27,7 @@ export default function RequirementSummary({
             返回修改对话
           </Button>
           <Button variant="primary" onClick={onProceed}>
-            生成候选方案
+            查看候选方案
           </Button>
         </div>
       </div>

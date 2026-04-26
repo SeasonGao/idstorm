@@ -229,7 +229,6 @@ def force_advance_dimension(session: Session) -> bool:
         session.current_dimension = DIMENSIONS[current_idx + 1]
     all_done = len(session.completed_dimensions) >= len(DIMENSIONS)
     if all_done:
-        session.status = "requirement"
         session.current_dimension = ""
     return all_done
 
@@ -518,7 +517,6 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
         is_last_dimension = current_idx >= len(DIMENSIONS) - 1
 
         if is_last_dimension:
-            session.status = "requirement"
             session.current_dimension = ""
             result = {
                 "content": "好的，我们已经完成了所有维度的信息收集，接下来将为您生成设计方案。",

@@ -7,7 +7,7 @@ URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
 
 HEADERS = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer ark-2385568a-ea0d-4d59-9eba-c2fc4dd56d49-3652d"
+    "Authorization": f"Bearer ark-"
 }
 
 PAYLOAD = {

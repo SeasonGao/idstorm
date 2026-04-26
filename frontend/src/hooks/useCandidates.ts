@@ -10,6 +10,20 @@ export function useCandidates() {
   const [error, setError] = useState<string | null>(null);
   const [imageModel, setImageModel] = useState<ImageModel>("doubao");
 
+  const loadExisting = useCallback(async (sessionId: string): Promise<boolean> => {
+    try {
+      const res = await apiClient.get(`/candidate/${sessionId}`);
+      const existing = res.data.candidates as Candidate[];
+      if (existing.length > 0) {
+        setCandidates(existing);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const generate = useCallback(async (sessionId: string, model?: ImageModel) => {
     setIsGenerating(true);
     setError(null);
@@ -76,7 +90,7 @@ export function useCandidates() {
   );
 
   return {
-    candidates, isGenerating, error, generate, regenerateImage, iterate,
+    candidates, isGenerating, error, loadExisting, generate, regenerateImage, iterate,
     imageModel, setImageModel,
   };
 }

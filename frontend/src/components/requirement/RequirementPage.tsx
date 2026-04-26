@@ -95,7 +95,6 @@ export default function RequirementPage({ sessionId, onProceed, onBack }: Requir
   }
 
   const dimensions = Object.values(requirement.dimensions);
-  const totalFields = dimensions.reduce((sum, d) => sum + d.fields.length, 0);
 
   return (
     <div className="flex h-full flex-col">
@@ -115,7 +114,6 @@ export default function RequirementPage({ sessionId, onProceed, onBack }: Requir
       </div>
       <RequirementSummary
         dimensionCount={dimensions.length}
-        fieldCount={totalFields}
         version={requirement.version}
         onProceed={onProceed}
         onBack={onBack}

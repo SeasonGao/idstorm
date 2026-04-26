@@ -29,6 +29,14 @@ class RegenerateImageRequest(BaseModel):
     image_model: str | None = None
 
 
+@router.get("/candidate/{session_id}")
+async def get_candidates(session_id: str):
+    session = session_store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"candidates": session.candidates or []}
+
+
 @router.post("/candidate/generate")
 async def generate_candidates(req: GenerateRequest):
     session = session_store.get(req.session_id)

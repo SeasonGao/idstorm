@@ -1,9 +1,3 @@
-"""Requirement builder service for constructing structured design requirements.
-
-Transforms dialogue outputs into a structured DesignRequirement object
-with dimensions (form size, material color, scenario, brand).
-"""
-
 import json
 import logging
 
@@ -14,61 +8,33 @@ from app.models.requirement import DimensionField, Dimension, DesignRequirement
 
 logger = logging.getLogger(__name__)
 
-EXTRACTION_SYSTEM_PROMPT = """你是一个设计需求分析专家。根据以下设计咨询对话，提取结构化的设计需求。
+EXTRACTION_SYSTEM_PROMPT = """你是一个设计需求提炼助手。根据以下设计咨询对话，提炼出4个维度的设计需求描述。
 
-对于4个维度，根据用户的描述填写具体字段。如果某个字段没有被明确讨论，根据上下文推断合理的默认值。
+规则：
+1. 只输出4个维度：形态与尺寸、材质与色彩、使用场景与交互、品牌与市场定位。
+2. 每个维度只用一段话描述，把用户提到的相关信息合理串联起来。
+3. 如果某个维度在对话中完全没有被讨论过，对应值填空字符串。
+4. 不要推断或补充用户没有提到的信息。
 
 输出JSON格式：
 {
-  "form_size": {
-    "morphology": "产品形态描述",
-    "proportions": "尺寸比例描述",
-    "line_style": "线条风格描述"
-  },
-  "material_color": {
-    "material": "主要材质",
-    "surface_treatment": "表面处理",
-    "color_palette": "色彩方案"
-  },
-  "scenario": {
-    "usage_context": "使用场景",
-    "interaction_method": "交互方式",
-    "ergonomics": "人机工程"
-  },
-  "brand": {
-    "brand_tone": "品牌调性",
-    "price_range": "价格区间",
-    "target_audience": "目标用户"
-  }
+  "form_size": "一段关于产品形态和尺寸的描述",
+  "material_color": "一段关于材质和色彩的描述",
+  "scenario": "一段关于使用场景和交互方式的描述",
+  "brand": "一段关于品牌调性和目标市场的描述"
 }
 
 只输出JSON，不要其他文字。"""
 
 DIMENSION_CONFIGS = {
-    "form_size": ("形态与尺寸", ["morphology", "proportions", "line_style"]),
-    "material_color": ("材质与色彩", ["material", "surface_treatment", "color_palette"]),
-    "scenario": ("使用场景与交互", ["usage_context", "interaction_method", "ergonomics"]),
-    "brand": ("品牌与市场定位", ["brand_tone", "price_range", "target_audience"]),
-}
-
-FIELD_LABELS = {
-    "morphology": "产品形态",
-    "proportions": "尺寸比例",
-    "line_style": "线条风格",
-    "material": "主要材质",
-    "surface_treatment": "表面处理",
-    "color_palette": "色彩方案",
-    "usage_context": "使用场景",
-    "interaction_method": "交互方式",
-    "ergonomics": "人机工程",
-    "brand_tone": "品牌调性",
-    "price_range": "价格区间",
-    "target_audience": "目标用户",
+    "form_size": "形态与尺寸",
+    "material_color": "材质与色彩",
+    "scenario": "使用场景与交互",
+    "brand": "品牌与市场定位",
 }
 
 
 def _strip_markdown_code_block(content: str) -> str:
-    """Remove surrounding markdown code fences if present."""
     content = content.strip()
     if content.startswith("```"):
         content = content.split("\n", 1)[1] if "\n" in content else content[3:]
@@ -79,8 +45,6 @@ def _strip_markdown_code_block(content: str) -> str:
 
 
 async def extract_requirement(messages: list) -> DesignRequirement:
-    """Extract structured design requirement from dialogue history using DeepSeek."""
-
     extraction_messages = [{"role": "system", "content": EXTRACTION_SYSTEM_PROMPT}]
     for msg in messages:
         if msg.role in ("user", "assistant"):
@@ -104,16 +68,17 @@ async def extract_requirement(messages: list) -> DesignRequirement:
     data = json.loads(content)
 
     dimensions: list[Dimension] = []
-    for dim_key, (dim_label, field_keys) in DIMENSION_CONFIGS.items():
-        dim_data = data.get(dim_key, {})
-        fields: list[DimensionField] = []
-        for fk in field_keys:
-            fields.append(DimensionField(
-                key=fk,
-                label=FIELD_LABELS.get(fk, fk),
-                value=dim_data.get(fk, "待定"),
+    for dim_key, dim_label in DIMENSION_CONFIGS.items():
+        value = data.get(dim_key, "")
+        dimensions.append(Dimension(
+            key=dim_key,
+            label=dim_label,
+            fields=[DimensionField(
+                key="description",
+                label="需求描述",
+                value=value,
                 editable=True,
-            ))
-        dimensions.append(Dimension(key=dim_key, label=dim_label, fields=fields))
+            )],
+        ))
 
     return DesignRequirement(dimensions=dimensions, version=1)

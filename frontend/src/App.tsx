@@ -54,8 +54,25 @@ function App() {
   };
 
   const handleSwitchSession = async (sid: string) => {
-    await switchSession(sid);
+    const newStatus = await switchSession(sid);
+    setCurrentStep(statusToStep(newStatus));
     setDesignKey(prev => prev + 1);
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
+    e.stopPropagation();
+    if (!confirm("确定删除该会话？")) return;
+    try {
+      await apiClient.delete(`/session/${sid}`);
+      if (sid === sessionId) {
+        resetSession();
+        setCurrentStep(1);
+        setDesignKey(prev => prev + 1);
+      }
+      fetchSessions();
+    } catch {
+      // ignore
+    }
   };
 
   return (
@@ -79,10 +96,10 @@ function App() {
           ) : (
             <ul>
               {sessions.map((s) => (
-                <li key={s.session_id}>
+                <li key={s.session_id} className="group relative">
                   <button
                     onClick={() => handleSwitchSession(s.session_id)}
-                    className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 border-b border-gray-100 ${
+                    className={`w-full text-left px-4 py-3 pr-9 transition-colors hover:bg-gray-50 border-b border-gray-100 ${
                       s.session_id === sessionId ? "bg-blue-50 border-l-2 border-l-blue-600" : ""
                     }`}
                   >
@@ -103,6 +120,15 @@ function App() {
                       </span>
                       <span>{new Date(s.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteSession(e, s.session_id)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-300 opacity-0 group-hover:opacity-100 hover:bg-gray-100 hover:text-red-500 transition-all"
+                    title="删除会话"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 </li>
               ))}
@@ -130,25 +156,28 @@ function App() {
                 const stepNum = step.step;
                 const isActive = stepNum === currentStep;
                 const isCompleted = stepNum < currentStep;
+                const clickable = isCompleted || isActive;
                 return (
                   <li key={step.key} className="flex items-center gap-2">
                     {idx > 0 && (
                       <div className={`h-px w-8 ${stepNum <= currentStep ? "bg-blue-600" : "bg-gray-300"}`} />
                     )}
-                    <div
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                    <button
+                      disabled={!clickable}
+                      onClick={() => setCurrentStep(stepNum)}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                         isActive
                           ? "bg-blue-600 text-white"
                           : isCompleted
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-400"
+                            ? "bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer"
+                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                     >
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px]">
                         {isCompleted ? "✓" : stepNum}
                       </span>
                       {step.label}
-                    </div>
+                    </button>
                   </li>
                 );
               })}

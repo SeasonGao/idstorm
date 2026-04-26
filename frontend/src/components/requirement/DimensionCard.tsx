@@ -1,5 +1,5 @@
+import React, { useState } from "react";
 import type { Dimension } from "../../types";
-import EditableField from "./EditableField";
 
 const DIMENSION_COLORS: Record<string, string> = {
   form_size: "border-blue-500",
@@ -8,7 +8,7 @@ const DIMENSION_COLORS: Record<string, string> = {
   brand: "border-purple-500",
 };
 
-const DIMENSION_ICONS: Record<string, JSX.Element> = {
+const DIMENSION_ICONS: Record<string, React.ReactNode> = {
   form_size: (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
       <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 8a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zm6-6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zm2 6a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2z" />
@@ -40,6 +40,20 @@ interface DimensionCardProps {
 export default function DimensionCard({ dimension, onFieldChange }: DimensionCardProps) {
   const borderColor = DIMENSION_COLORS[dimension.key] || "border-gray-300";
   const icon = DIMENSION_ICONS[dimension.key];
+  const descriptionField = dimension.fields.find(f => f.key === "description");
+  const description = descriptionField?.value || "";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(description);
+
+  const handleSave = () => {
+    onFieldChange(dimension.key, "description", draft);
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setDraft(description);
+    setEditing(false);
+  };
 
   return (
     <div className={`rounded-lg border border-gray-200 bg-white shadow-sm border-l-4 ${borderColor}`}>
@@ -47,14 +61,43 @@ export default function DimensionCard({ dimension, onFieldChange }: DimensionCar
         {icon}
         <h3 className="text-sm font-semibold text-gray-800">{dimension.label}</h3>
       </div>
-      <div className="space-y-3 px-4 py-3">
-        {dimension.fields.map((field) => (
-          <EditableField
-            key={field.key}
-            field={field}
-            onSave={(fieldKey, value) => onFieldChange(dimension.key, fieldKey, value)}
-          />
-        ))}
+      <div className="px-4 py-3">
+        {editing ? (
+          <div className="space-y-2">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              rows={3}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleCancel}
+                className="rounded-md px-3 py-1 text-xs text-gray-500 hover:bg-gray-100"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            onClick={() => { setDraft(description); setEditing(true); }}
+            className="cursor-pointer rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors min-h-[3rem]"
+          >
+            {description ? (
+              <p>{description}</p>
+            ) : (
+              <p className="text-gray-400 italic">点击添加描述...</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

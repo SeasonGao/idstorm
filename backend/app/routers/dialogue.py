@@ -62,7 +62,7 @@ async def send_message(req: DialogueRequest):
     dialogue_complete = result.get("dialogue_complete", False)
     dimension_progress = result.get("dimension_progress", _get_dimension_progress(session))
 
-    assistant_msg = Message(role="assistant", content=content, timestamp=datetime.now())
+    assistant_msg = Message(role="assistant", content=content, timestamp=datetime.now(), options=options)
     session.messages.append(assistant_msg)
     session_store.update(req.session_id, session)
 
@@ -110,7 +110,7 @@ async def _handle_skip_to_next(session_id: str, session) -> DialogueResponse:
     dialogue_complete = result.get("dialogue_complete", False)
     dimension_progress = result.get("dimension_progress", _get_dimension_progress(session))
 
-    assistant_msg = Message(role="assistant", content=content, timestamp=datetime.now())
+    assistant_msg = Message(role="assistant", content=content, timestamp=datetime.now(), options=options)
     session.messages.append(assistant_msg)
     session_store.update(session_id, session)
 
@@ -137,7 +137,12 @@ async def get_history(session_id: str):
         raise HTTPException(status_code=404, detail="会话不存在")
 
     messages = [
-        {"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat() if m.timestamp else None}
+        {
+            "role": m.role,
+            "content": m.content,
+            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+            "options": m.options,
+        }
         for m in session.messages
     ]
 

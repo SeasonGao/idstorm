@@ -7,7 +7,7 @@ interface SessionState {
   initialIdea: string | null;
   createSession: (initialIdea: string) => Promise<{ session_id: string; status: string }>;
   resetSession: () => void;
-  switchSession: (sessionId: string) => Promise<void>;
+  switchSession: (sessionId: string) => Promise<string>;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -54,12 +54,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("idstorm_session_id");
   }, []);
 
-  const switchSession = useCallback(async (sid: string) => {
+  const switchSession = useCallback(async (sid: string): Promise<string> => {
     const res = await apiClient.get(`/session/${sid}/state`);
+    const newStatus = res.data.status;
     setSessionId(res.data.session_id);
-    setStatus(res.data.status);
+    setStatus(newStatus);
     setInitialIdea(res.data.initial_idea || null);
     localStorage.setItem("idstorm_session_id", sid);
+    return newStatus;
   }, []);
 
   return (

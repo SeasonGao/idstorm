@@ -76,3 +76,12 @@ async def list_sessions():
         for s in sessions
     ]
     return SessionListResponse(sessions=items)
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    session = session_store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    session_store.delete(session_id)
+    return {"message": "ok"}

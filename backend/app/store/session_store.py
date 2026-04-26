@@ -20,6 +20,8 @@ def _serialize_session(session: Session) -> dict:
         msg = {"role": m.role, "content": m.content}
         if m.timestamp:
             msg["timestamp"] = m.timestamp.isoformat()
+        if m.options:
+            msg["options"] = m.options
         messages.append(msg)
 
     requirement = None
@@ -53,6 +55,7 @@ def _deserialize_session(data: dict) -> Session:
             role=m["role"],
             content=m["content"],
             timestamp=datetime.fromisoformat(ts) if ts else None,
+            options=m.get("options"),
         ))
 
     requirement = None
