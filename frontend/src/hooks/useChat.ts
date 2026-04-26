@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import type { ChatMessage, DimensionProgress, MessageOptions } from "../types";
+import type { ChatMessage, DimensionProgress } from "../types";
 
 export function useChat(onSessionError?: (code: string) => void) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -36,7 +36,7 @@ export function useChat(onSessionError?: (code: string) => void) {
       console.log(`[CHAT] 收到响应:`, data);
 
       const assistantContent = data.content || "";
-      const options = data.options as MessageOptions | null | undefined;
+      const options = data.options as string[] | null | undefined;
       const dp = data.dimension_progress as DimensionProgress | null;
       const dc = data.dialogue_complete as boolean;
 
@@ -97,7 +97,7 @@ export function useChat(onSessionError?: (code: string) => void) {
       console.log(`[CHAT] skipToNext 响应:`, data);
 
       const assistantContent = data.content || "";
-      const options = data.options as MessageOptions | null | undefined;
+      const options = data.options as string[] | null | undefined;
       const dp = data.dimension_progress as DimensionProgress | null;
       const dc = data.dialogue_complete as boolean;
 

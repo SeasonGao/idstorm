@@ -19,3 +19,5 @@ class Session:
     candidates: Optional[list] = None
     current_dimension: str = "form_size"
     completed_dimensions: list = field(default_factory=list)
+    dimension_summaries: dict = field(default_factory=dict)
+    dimension_message_start: int = 0

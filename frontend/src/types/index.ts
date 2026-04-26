@@ -3,15 +3,10 @@ export interface Session {
   status: "dialogue" | "requirement" | "generating" | "review";
 }
 
-export interface MessageOptions {
-  type: "single" | "multi";
-  items: string[];
-}
-
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  options?: MessageOptions | null;
+  options?: string[] | null;
 }
 
 export interface DimensionProgress {

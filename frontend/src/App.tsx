@@ -8,6 +8,7 @@ import "./index.css";
 
 function App() {
   const [currentStep, setCurrentStep] = useState(1);
+  const [designKey, setDesignKey] = useState(0);
   const { sessionId, resetSession } = useSession();
 
   return (
@@ -22,6 +23,7 @@ function App() {
             onClick={() => {
               resetSession();
               setCurrentStep(1);
+              setDesignKey(prev => prev + 1);
             }}
             className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
           >
@@ -67,17 +69,19 @@ function App() {
       {/* Main content */}
       <main className="flex min-h-0 flex-1 flex-col">
         {currentStep === 1 && (
-          <DialoguePage onComplete={() => setCurrentStep(2)} />
+          <DialoguePage key={designKey} onComplete={() => setCurrentStep(2)} />
         )}
         {currentStep === 2 && sessionId && (
           <RequirementPage
+            key={designKey}
             sessionId={sessionId}
             onProceed={() => setCurrentStep(3)}
-            onBack={() => setCurrentStep(1)}
+            onBack={() => setCurrentStep(2)}
           />
         )}
         {currentStep === 3 && sessionId && (
           <CandidatePage
+            key={designKey}
             sessionId={sessionId}
             onBack={() => setCurrentStep(2)}
           />

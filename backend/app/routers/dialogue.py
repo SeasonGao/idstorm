@@ -25,7 +25,7 @@ class DialogueRequest(BaseModel):
 
 class DialogueResponse(BaseModel):
     content: str
-    options: dict | None = None
+    options: list | None = None
     design_complete: bool = False
     dialogue_complete: bool = False
     dimension_progress: dict

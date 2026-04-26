@@ -10,7 +10,7 @@ interface MessageBubbleProps {
 
 export default function MessageBubble({ message, onOptionSelect, onOptionMultiConfirm, optionsDisabled }: MessageBubbleProps) {
   const isUser = message.role === "user";
-  const hasOptions = !isUser && message.options && message.options.items.length > 0;
+  const hasOptions = !isUser && message.options && message.options.length > 0;
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>

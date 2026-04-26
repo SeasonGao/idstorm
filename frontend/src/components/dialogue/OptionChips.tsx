@@ -1,20 +1,16 @@
 import { useState } from "react";
-import type { MessageOptions } from "../../types";
 
 interface OptionChipsProps {
-  options: MessageOptions;
+  options: string[];
   disabled?: boolean;
   onSelect: (selected: string) => void;
   onMultiConfirm: (selected: string[]) => void;
 }
 
 export default function OptionChips({ options, disabled = false, onSelect, onMultiConfirm }: OptionChipsProps) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmed, setConfirmed] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
   const [customText, setCustomText] = useState("");
-
-  const isMulti = options.type === "multi";
 
   const handleSingleClick = (item: string) => {
     if (disabled || confirmed) return;
@@ -22,23 +18,8 @@ export default function OptionChips({ options, disabled = false, onSelect, onMul
     onSelect(item);
   };
 
-  const handleToggle = (item: string) => {
-    if (disabled || confirmed) return;
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(item)) {
-        next.delete(item);
-      } else {
-        next.add(item);
-      }
-      return next;
-    });
-  };
-
-  const handleMultiConfirm = () => {
-    if (disabled || confirmed || selected.size === 0) return;
-    setConfirmed(true);
-    onMultiConfirm(Array.from(selected));
+  const handleOtherClick = () => {
+    setShowCustom(true);
   };
 
   const handleCustomSubmit = () => {
@@ -55,34 +36,20 @@ export default function OptionChips({ options, disabled = false, onSelect, onMul
     }
   };
 
-  // Show custom input when "其他..." is clicked (for single-select)
-  const handleOtherClick = () => {
-    if (isMulti) {
-      // For multi-select, just toggle "其他" and show input
-      setShowCustom(true);
-    } else {
-      setShowCustom(true);
-    }
-  };
-
-  const allItems = [...options.items];
+  const allItems = [...options];
 
   return (
     <div className="mt-2 flex flex-wrap gap-2">
       {allItems.map((item) => {
-        const isSelected = selected.has(item);
-        const isDisabled = disabled || confirmed;
         return (
           <button
             key={item}
-            onClick={() => isMulti ? handleToggle(item) : handleSingleClick(item)}
-            disabled={isDisabled}
+            onClick={() => handleSingleClick(item)}
+            disabled={disabled || confirmed}
             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-              isSelected
-                ? "border-blue-500 bg-blue-50 text-blue-700"
-                : isDisabled
-                  ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
-                  : "border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600"
+              disabled || confirmed
+                ? "border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed"
+                : "border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600"
             }`}
           >
             {item}
@@ -90,7 +57,6 @@ export default function OptionChips({ options, disabled = false, onSelect, onMul
         );
       })}
 
-      {/* "其他..." option */}
       {!showCustom && (
         <button
           onClick={handleOtherClick}
@@ -105,7 +71,6 @@ export default function OptionChips({ options, disabled = false, onSelect, onMul
         </button>
       )}
 
-      {/* Custom text input */}
       {showCustom && (
         <div className="flex items-center gap-1.5">
           <input
@@ -126,16 +91,6 @@ export default function OptionChips({ options, disabled = false, onSelect, onMul
             确定
           </button>
         </div>
-      )}
-
-      {/* Multi-select confirm button */}
-      {isMulti && !confirmed && selected.size > 0 && (
-        <button
-          onClick={handleMultiConfirm}
-          className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-        >
-          确认选择 ({selected.size})
-        </button>
       )}
     </div>
   );
