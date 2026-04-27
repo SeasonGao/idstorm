@@ -21,3 +21,4 @@ class Session:
     completed_dimensions: list = field(default_factory=list)
     dimension_summaries: dict = field(default_factory=dict)
     dimension_message_start: int = 0
+    archived_messages: list = field(default_factory=list)

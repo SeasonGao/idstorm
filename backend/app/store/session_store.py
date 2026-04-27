@@ -22,6 +22,8 @@ def _serialize_session(session: Session) -> dict:
             msg["timestamp"] = m.timestamp.isoformat()
         if m.options:
             msg["options"] = m.options
+        if m.hidden:
+            msg["hidden"] = True
         messages.append(msg)
 
     requirement = None
@@ -44,6 +46,12 @@ def _serialize_session(session: Session) -> dict:
         "completed_dimensions": session.completed_dimensions,
         "dimension_summaries": session.dimension_summaries,
         "dimension_message_start": session.dimension_message_start,
+        "archived_messages": [
+            {"role": m.role, "content": m.content,
+             "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+             "options": m.options}
+            for m in session.archived_messages
+        ],
     }
 
 
@@ -56,6 +64,7 @@ def _deserialize_session(data: dict) -> Session:
             content=m["content"],
             timestamp=datetime.fromisoformat(ts) if ts else None,
             options=m.get("options"),
+            hidden=m.get("hidden", False),
         ))
 
     requirement = None
@@ -79,6 +88,16 @@ def _deserialize_session(data: dict) -> Session:
         completed_dimensions=data.get("completed_dimensions", []),
         dimension_summaries=data.get("dimension_summaries", {}),
         dimension_message_start=data.get("dimension_message_start", 0),
+        archived_messages=[
+            Message(
+                role=m["role"],
+                content=m["content"],
+                timestamp=datetime.fromisoformat(m["timestamp"]) if m.get("timestamp") else None,
+                options=m.get("options"),
+                hidden=m.get("hidden", False),
+            )
+            for m in data.get("archived_messages", [])
+        ],
     )
 
 

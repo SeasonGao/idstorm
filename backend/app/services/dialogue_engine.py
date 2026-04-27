@@ -529,6 +529,7 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
             return result
 
         session.current_dimension = DIMENSIONS[current_idx + 1]
+        session.archived_messages.extend(session.messages)
         rebuilt = []
         for dim_key in DIMENSIONS:
             if dim_key in session.dimension_summaries:
@@ -536,6 +537,7 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
                 rebuilt.append(Message(
                     role="assistant",
                     content=f"{dim_label}维度总结：{session.dimension_summaries[dim_key]}",
+                    hidden=True,
                 ))
         session.messages = rebuilt
         session.dimension_message_start = len(rebuilt)

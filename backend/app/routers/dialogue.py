@@ -136,6 +136,7 @@ async def get_history(session_id: str):
     if session is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
+    all_messages = list(session.archived_messages) + list(session.messages)
     messages = [
         {
             "role": m.role,
@@ -143,7 +144,7 @@ async def get_history(session_id: str):
             "timestamp": m.timestamp.isoformat() if m.timestamp else None,
             "options": m.options,
         }
-        for m in session.messages
+        for m in all_messages if not m.hidden
     ]
 
     return HistoryResponse(

@@ -9,6 +9,7 @@ class Message:
     content: str
     timestamp: datetime = None
     options: Optional[list[str]] = None
+    hidden: bool = False
 
     def __post_init__(self):
         if self.timestamp is None:
