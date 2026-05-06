@@ -15,10 +15,14 @@ from app.models.requirement import DesignRequirement
 logger = logging.getLogger(__name__)
 
 
-async def build_image_prompts(requirement: DesignRequirement) -> list[dict]:
-    """Build 6 image prompts (3 candidates x 2 views) from the design requirement.
+async def build_image_prompts(
+    requirement: DesignRequirement,
+    count: int = 3,
+    api_keys: dict | None = None,
+) -> list[dict]:
+    """Build image prompts (count candidates x 2 views) from the design requirement.
 
-    Returns list of 6 dicts:
+    Returns list of dicts:
         [{"candidate_id": "c1", "view": "orthographic", "prompt": "..."}, ...]
     """
 
@@ -29,7 +33,7 @@ async def build_image_prompts(requirement: DesignRequirement) -> list[dict]:
             fields[f.key] = f.value
 
     # Get variant suggestions from DeepSeek
-    variants = await _suggest_variants(fields)
+    variants = await _suggest_variants(fields, count, api_keys)
 
     prompts: list[dict] = []
     for variant in variants:
@@ -70,10 +74,16 @@ async def build_image_prompts(requirement: DesignRequirement) -> list[dict]:
     return prompts
 
 
-async def _suggest_variants(fields: dict) -> list[dict]:
-    """Ask DeepSeek to suggest 3 micro-variants."""
+async def _suggest_variants(fields: dict, count: int = 3, api_keys: dict | None = None) -> list[dict]:
+    """Ask DeepSeek to suggest N micro-variants."""
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    examples = "\n".join(
+        f'  {{"id": "c{i+1}", "label": "方案{letters[i]}", "modifier": "示例修饰语{i+1}"}}'
+        + ("," if i < min(count, 3) - 1 else "")
+        for i in range(min(count, 3))
+    )
 
-    variant_prompt = f"""基于以下设计需求，建议3个微调变种方案。每个变种保持核心风格不变，只在一个次要属性上有差异。
+    variant_prompt = f"""基于以下设计需求，建议{count}个微调变种方案。每个变种保持核心风格不变，只在一个次要属性上有差异。
 
 设计需求：
 - 形态：{fields.get('morphology', '')}
@@ -83,18 +93,18 @@ async def _suggest_variants(fields: dict) -> list[dict]:
 
 输出JSON数组格式：
 [
-  {{"id": "c1", "label": "方案A", "modifier": "标准设计，温暖木质细节"}},
-  {{"id": "c2", "label": "方案B", "modifier": "略微冷色调，金属质感加强"}},
-  {{"id": "c3", "label": "方案C", "modifier": "添加功能性元素，表面纹理变化"}}
+{examples}
 ]
 
-只输出JSON数组，不要其他文字。确保3个变种的modifier描述简洁（15字以内），且保持微调而非大改。"""
+只输出JSON数组，不要其他文字。确保{count}个变种的modifier描述简洁（15字以内），且保持微调而非大改。"""
+
+    api_key = (api_keys or {}).get("deepseek_api_key") or settings.deepseek_api_key
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{settings.deepseek_base_url}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+                headers={"Authorization": f"Bearer {api_key}"},
                 json={
                     "model": settings.deepseek_model,
                     "messages": [{"role": "user", "content": variant_prompt}],
@@ -105,18 +115,27 @@ async def _suggest_variants(fields: dict) -> list[dict]:
             result = response.json()
             content = result["choices"][0]["message"]["content"].strip()
 
-            # Parse JSON — strip markdown code fences if present
             if content.startswith("```"):
                 content = content.split("\n", 1)[1] if "\n" in content else content[3:]
                 if content.endswith("```"):
                     content = content[:-3]
                 content = content.strip()
 
-            return json.loads(content)
+            variants = json.loads(content)
+            # Ensure we have the requested count
+            if len(variants) < count:
+                for i in range(len(variants), count):
+                    variants.append({
+                        "id": f"c{i+1}",
+                        "label": f"方案{letters[i]}",
+                        "modifier": f"变体{i+1}",
+                    })
+            return variants[:count]
     except Exception:
         logger.warning("Variant suggestion failed, using fallback variants")
+        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        fallback_modifiers = ["标准设计", "色彩微调，质感变化", "细节调整，功能元素", "形态简化，材质混合", "大胆配色，造型突破"]
         return [
-            {"id": "c1", "label": "方案A", "modifier": "标准设计"},
-            {"id": "c2", "label": "方案B", "modifier": "色彩微调，质感变化"},
-            {"id": "c3", "label": "方案C", "modifier": "细节调整，功能元素"},
+            {"id": f"c{i+1}", "label": f"方案{letters[i]}", "modifier": fallback_modifiers[i % len(fallback_modifiers)]}
+            for i in range(count)
         ]

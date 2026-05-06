@@ -39,9 +39,10 @@ async def health_check():
     return {"status": "ok", "service": "idstorm-api"}
 
 
-from app.routers import candidate, dialogue, requirement, session  # noqa: E402
+from app.routers import candidate, config, dialogue, requirement, session  # noqa: E402
 
 app.include_router(session.router, prefix="/api")
 app.include_router(dialogue.router, prefix="/api")
 app.include_router(requirement.router, prefix="/api")
 app.include_router(candidate.router, prefix="/api")
+app.include_router(config.router, prefix="/api")

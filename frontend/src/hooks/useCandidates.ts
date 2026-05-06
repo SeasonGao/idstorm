@@ -24,13 +24,14 @@ export function useCandidates() {
     }
   }, []);
 
-  const generate = useCallback(async (sessionId: string, model?: ImageModel) => {
+  const generate = useCallback(async (sessionId: string, model?: ImageModel, candidateCount?: number) => {
     setIsGenerating(true);
     setError(null);
     try {
       const res = await apiClient.post("/candidate/generate", {
         session_id: sessionId,
         image_model: model || imageModel,
+        candidate_count: candidateCount || 3,
       });
       setCandidates(res.data.candidates);
     } catch (err: unknown) {

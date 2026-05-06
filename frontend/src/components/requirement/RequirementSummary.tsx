@@ -27,7 +27,7 @@ export default function RequirementSummary({
             返回修改对话
           </Button>
           <Button variant="primary" onClick={onProceed}>
-            查看候选方案
+            下一步：生成候选方案
           </Button>
         </div>
       </div>

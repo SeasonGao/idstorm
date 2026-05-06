@@ -11,7 +11,7 @@ interface DialoguePageProps {
 }
 
 export default function DialoguePage({ onComplete }: DialoguePageProps) {
-  const { sessionId, status, setStatus, createSession, resetSession } = useSession();
+  const { sessionId, status, createSession, resetSession } = useSession();
   const { messages, setMessages, isStreaming, dimensionProgress, setDimensionProgress, dialogueComplete, setDialogueComplete, sendMessage, skipToNext } = useChat((code) => {
     if (code === "not_found") {
       resetSession();
@@ -138,7 +138,7 @@ export default function DialoguePage({ onComplete }: DialoguePageProps) {
       {dialogueComplete && !isStreaming ? (
         <div className="flex justify-center border-t border-gray-200 bg-white px-4 py-3">
           <Button onClick={onComplete}>
-            查看设计需求
+            下一步：提炼设计需求
           </Button>
         </div>
       ) : (

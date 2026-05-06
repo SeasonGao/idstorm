@@ -1,7 +1,7 @@
 {
   "id": "6f07c4c4-7028-4cf3-82c2-82d57e6e2782",
   "initial_idea": "茶几",
-  "status": "dialogue",
+  "status": "review",
   "created_at": "2026-04-27T10:19:34.787174",
   "messages": [
     {
@@ -42,8 +42,97 @@
       "timestamp": "2026-04-27T10:42:48.187187"
     }
   ],
-  "requirement": null,
-  "candidates": null,
+  "requirement": {
+    "dimensions": [
+      {
+        "key": "form_size",
+        "label": "形态与尺寸",
+        "fields": [
+          {
+            "key": "description",
+            "label": "需求描述",
+            "value": "圆润柔和的轮廓，茶几高度偏高以适应站立使用，台面水平延展范围适中，保持标准尺寸。",
+            "editable": true
+          }
+        ]
+      },
+      {
+        "key": "material_color",
+        "label": "材质与色彩",
+        "fields": [
+          {
+            "key": "description",
+            "label": "需求描述",
+            "value": "光滑亮面质感，台面与支撑结构采用不同材质但同色系，整体视觉统一。",
+            "editable": true
+          }
+        ]
+      },
+      {
+        "key": "scenario",
+        "label": "使用场景与交互",
+        "fields": [
+          {
+            "key": "description",
+            "label": "需求描述",
+            "value": "主要用于喝茶聊天场景，台面采用分区设计，包含专属使用者区域与嵌套结构，实现嵌入式融合。",
+            "editable": true
+          }
+        ]
+      },
+      {
+        "key": "brand",
+        "label": "品牌与市场定位",
+        "fields": [
+          {
+            "key": "description",
+            "label": "需求描述",
+            "value": "高端奢华定位，传递精致、优雅的核心情感，面向追求品质与独特体验的消费群体。",
+            "editable": true
+          }
+        ]
+      }
+    ],
+    "version": 1
+  },
+  "candidates": [
+    {
+      "id": "c1",
+      "label": "方案A",
+      "variant_description": "",
+      "orthographic_url": "/api/candidate/placeholder/c1/orthographic",
+      "render_url": "/api/candidate/placeholder/c1/render",
+      "status": "partial",
+      "failed_views": [
+        "orthographic",
+        "render"
+      ]
+    },
+    {
+      "id": "c2",
+      "label": "方案B",
+      "variant_description": "",
+      "orthographic_url": "/api/candidate/placeholder/c2/orthographic",
+      "render_url": "/api/candidate/placeholder/c2/render",
+      "status": "partial",
+      "failed_views": [
+        "orthographic",
+        "render"
+      ]
+    },
+    {
+      "id": "c3",
+      "label": "方案C",
+      "variant_description": "",
+      "orthographic_url": "/api/candidate/placeholder/c3/orthographic",
+      "render_url": "/api/candidate/placeholder/c3/render",
+      "status": "partial",
+      "failed_views": [
+        "orthographic",
+        "render"
+      ]
+    }
+  ],
   "current_dimension": "",
   "completed_dimensions": [
     "form_size",

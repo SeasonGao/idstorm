@@ -31,12 +31,14 @@ def _get_default_provider() -> str:
 # Doubao Seedream
 # ---------------------------------------------------------------------------
 
-async def _generate_doubao(prompt: str) -> tuple[str, str]:
+async def _generate_doubao(prompt: str, api_key: str | None = None) -> tuple[str, str]:
     """Generate a single image using Doubao Seedream API.
 
     Returns (image_id, file_path).
     """
     os.makedirs(IMAGES_DIR, exist_ok=True)
+
+    key = api_key or settings.doubao_api_key
 
     payload = {
         "model": settings.doubao_model,
@@ -52,7 +54,7 @@ async def _generate_doubao(prompt: str) -> tuple[str, str]:
         response = await client.post(
             f"{settings.doubao_base_url}/images/generations",
             headers={
-                "Authorization": f"Bearer {settings.doubao_api_key}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -86,18 +88,20 @@ async def _generate_doubao(prompt: str) -> tuple[str, str]:
 # OpenAI GPT-Image-2
 # ---------------------------------------------------------------------------
 
-async def _generate_openai(prompt: str, size: str = "1024x1024") -> tuple[str, str]:
+async def _generate_openai(prompt: str, size: str = "1024x1024", api_key: str | None = None) -> tuple[str, str]:
     """Generate a single image using OpenAI Images API.
 
     Returns (image_id, file_path).
     """
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
+    key = api_key or settings.openai_api_key
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             "https://api.openai.com/v1/images/generations",
             headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -134,21 +138,23 @@ async def _generate_openai(prompt: str, size: str = "1024x1024") -> tuple[str, s
 # Dispatcher
 # ---------------------------------------------------------------------------
 
-async def generate_image(prompt: str, provider: str | None = None) -> tuple[str, str]:
+async def generate_image(prompt: str, provider: str | None = None, api_keys: dict | None = None) -> tuple[str, str]:
     """Generate a single image using the specified provider.
 
     Args:
         prompt: Image generation prompt.
         provider: "doubao" or "openai". Defaults to settings.default_image_provider.
+        api_keys: Optional dict with user-provided API keys.
 
     Returns (image_id, file_path).
     """
     provider = provider or _get_default_provider()
+    keys = api_keys or {}
 
     if provider == "doubao":
-        return await _generate_doubao(prompt)
+        return await _generate_doubao(prompt, api_key=keys.get("doubao_api_key"))
     elif provider == "openai":
-        return await _generate_openai(prompt, settings.image_size)
+        return await _generate_openai(prompt, settings.image_size, api_key=keys.get("openai_api_key"))
     else:
         raise ValueError(f"Unknown image provider: {provider}")
 
@@ -156,11 +162,13 @@ async def generate_image(prompt: str, provider: str | None = None) -> tuple[str,
 async def generate_candidate_images(
     prompts: list[dict],
     provider: str | None = None,
+    api_keys: dict | None = None,
 ) -> list[dict]:
     """Generate all images for candidates with retry and partial failure handling.
 
     prompts: list of {"candidate_id": "c1", "view": "orthographic", "prompt": "..."}
     provider: "doubao" or "openai". Defaults to settings.default_image_provider.
+    api_keys: Optional dict with user-provided API keys.
 
     Returns list of results:
     - On success: {"candidate_id": ..., "view": ..., "image_id": ..., "file_path": ..., "status": "ok"}
@@ -172,7 +180,7 @@ async def generate_candidate_images(
         last_error = None
         for attempt in range(retries + 1):
             try:
-                image_id, file_path = await generate_image(prompt_text, resolved_provider)
+                image_id, file_path = await generate_image(prompt_text, resolved_provider, api_keys=api_keys)
                 return {
                     "candidate_id": candidate_id,
                     "view": view,

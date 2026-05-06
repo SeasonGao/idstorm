@@ -28,6 +28,7 @@ export default function CandidatePage({
   }, [sessionId, loadExisting]);
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [candidateCount, setCandidateCount] = useState(3);
 
   const handleIterateSuccess = () => {
     setSuccessMessage("方案已更新");
@@ -39,7 +40,7 @@ export default function CandidatePage({
   };
 
   const handleGenerate = () => {
-    generate(sessionId, imageModel);
+    generate(sessionId, imageModel, candidateCount);
   };
 
   return (
@@ -70,22 +71,43 @@ export default function CandidatePage({
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl px-4 py-6">
-          <div className="mb-6 flex items-center gap-3">
-            <span className="text-sm font-medium text-gray-600">图像模型：</span>
-            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-              {IMAGE_MODELS.map((m) => (
-                <button
-                  key={m.value}
-                  onClick={() => handleModelChange(m.value)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    imageModel === m.value
-                      ? "bg-white text-blue-600 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
+          <div className="mb-6 flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-600">图像模型：</span>
+              <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                {IMAGE_MODELS.map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => handleModelChange(m.value)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      imageModel === m.value
+                        ? "bg-white text-blue-600 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-600">方案数量：</span>
+              <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setCandidateCount(n)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      candidateCount === n
+                        ? "bg-white text-blue-600 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

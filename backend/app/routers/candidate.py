@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import IMAGES_DIR, settings
+from app.routers.config import get_user_api_keys
 from app.services.image_generator import generate_candidate_images
 from app.services.image_prompt_builder import build_image_prompts
 from app.store.session_store import session_store
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 class GenerateRequest(BaseModel):
     session_id: str
     image_model: str | None = None  # "doubao" or "openai", defaults to config
+    candidate_count: int = 3  # 1-5
 
 
 class RegenerateImageRequest(BaseModel):
@@ -45,15 +47,16 @@ async def generate_candidates(req: GenerateRequest):
     if not session.requirement:
         raise HTTPException(status_code=400, detail="Requirement not set")
 
+    count = max(1, min(5, req.candidate_count))
+    api_keys = get_user_api_keys()
+
     session.status = "generating"
     session_store.update(req.session_id, session)
 
     try:
-        # Build 6 prompts (3 candidates x 2 views)
-        prompts = await build_image_prompts(session.requirement)
+        prompts = await build_image_prompts(session.requirement, count=count, api_keys=api_keys)
 
-        # Generate all images in parallel with retry
-        results = await generate_candidate_images(prompts, provider=req.image_model)
+        results = await generate_candidate_images(prompts, provider=req.image_model, api_keys=api_keys)
 
         # Organize results into candidates
         candidate_map: dict[str, dict] = {}
@@ -80,9 +83,11 @@ async def generate_candidates(req: GenerateRequest):
             )
 
         # Build candidate objects
-        variant_labels = {"c1": "方案A", "c2": "方案B", "c3": "方案C"}
+        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        candidate_ids = [f"c{i+1}" for i in range(count)]
+        variant_labels = {f"c{i+1}": f"方案{letters[i]}" for i in range(count)}
         candidates = []
-        for cid in ["c1", "c2", "c3"]:
+        for cid in candidate_ids:
             if cid in candidate_map:
                 data = candidate_map[cid]
                 status = "complete" if not data["failed_views"] else "partial"
@@ -149,7 +154,7 @@ async def regenerate_image(req: RegenerateImageRequest):
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    prompts_data = await build_image_prompts(session.requirement)
+    prompts_data = await build_image_prompts(session.requirement, api_keys=get_user_api_keys())
     target_prompt = next(
         (p for p in prompts_data if p["candidate_id"] == req.candidate_id and p["view"] == req.view),
         None,
@@ -157,7 +162,7 @@ async def regenerate_image(req: RegenerateImageRequest):
     if not target_prompt:
         raise HTTPException(status_code=400, detail="View not found")
 
-    results = await generate_candidate_images([target_prompt], provider=req.image_model)
+    results = await generate_candidate_images([target_prompt], provider=req.image_model, api_keys=get_user_api_keys())
     result = results[0]
 
     if result["status"] == "ok":
@@ -213,6 +218,7 @@ async def iterate_candidate(req: IterateRequest):
 
 async def _iterate_text_edit(session, candidate: dict, updates: dict, session_id: str, image_model: str | None = None):
     """Regenerate candidate with updated requirement fields."""
+    api_keys = get_user_api_keys()
     req = session.requirement
 
     # Apply updates - updates is {field_key: new_value}
@@ -224,14 +230,14 @@ async def _iterate_text_edit(session, candidate: dict, updates: dict, session_id
     req.version += 1
 
     # Build prompts for just this candidate
-    prompts_data = await build_image_prompts(req)
+    prompts_data = await build_image_prompts(req, api_keys=api_keys)
     target_prompts = [p for p in prompts_data if p["candidate_id"] == candidate["id"]]
 
     if not target_prompts:
         raise HTTPException(status_code=500, detail="Could not build prompts for candidate")
 
     # Regenerate both images for this candidate
-    results = await generate_candidate_images(target_prompts, provider=image_model)
+    results = await generate_candidate_images(target_prompts, provider=image_model, api_keys=api_keys)
 
     for r in results:
         if r["status"] == "ok":
@@ -254,6 +260,7 @@ async def _iterate_text_edit(session, candidate: dict, updates: dict, session_id
 
 async def _iterate_image_feedback(session, candidate: dict, updates: dict, session_id: str, image_model: str | None = None):
     """Interpret image feedback via DeepSeek and regenerate."""
+    api_keys = get_user_api_keys()
     annotation_text = updates.get("annotation_text", "")
     if not annotation_text:
         raise HTTPException(status_code=400, detail="annotation_text is required for image_feedback mode")
@@ -280,10 +287,11 @@ async def _iterate_image_feedback(session, candidate: dict, updates: dict, sessi
 只输出JSON，不要其他文字。如果没有需要修改的字段，输出空JSON：{{}}"""
 
     try:
+        deepseek_key = api_keys.get("deepseek_api_key") or settings.deepseek_api_key
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{settings.deepseek_base_url}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+                headers={"Authorization": f"Bearer {deepseek_key}"},
                 json={
                     "model": settings.deepseek_model,
                     "messages": [{"role": "user", "content": interpret_prompt}],
