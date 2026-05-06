@@ -15,7 +15,13 @@ export function useCandidates() {
       const res = await apiClient.get(`/candidate/${sessionId}`);
       const existing = res.data.candidates as Candidate[];
       if (existing.length > 0) {
-        setCandidates(existing);
+        // Map old-format candidates (orthographic_url/render_url) to new format (image_url)
+        const mapped = existing.map((c: any) => ({
+          ...c,
+          image_url: c.image_url || c.orthographic_url || "",
+          status: c.status === "partial" ? "failed" : c.status,
+        }));
+        setCandidates(mapped);
         return true;
       }
       return false;

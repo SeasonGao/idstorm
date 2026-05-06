@@ -32,7 +32,13 @@ def _serialize_session(session: Session) -> dict:
         for d in session.requirement.dimensions:
             fields = [{"key": f.key, "label": f.label, "value": f.value, "editable": f.editable} for f in d.fields]
             dims.append({"key": d.key, "label": d.label, "fields": fields})
-        requirement = {"dimensions": dims, "version": session.requirement.version}
+        requirement = {
+            "dimensions": dims,
+            "version": session.requirement.version,
+            "product_name": session.requirement.product_name,
+            "three_view_desc": session.requirement.three_view_desc,
+            "scene_desc": session.requirement.scene_desc,
+        }
 
     return {
         "id": session.id,
@@ -74,7 +80,13 @@ def _deserialize_session(data: dict) -> Session:
         for d in req_data.get("dimensions", []):
             fields = [DimensionField(**f) for f in d.get("fields", [])]
             dims.append(Dimension(key=d["key"], label=d["label"], fields=fields))
-        requirement = DesignRequirement(dimensions=dims, version=req_data.get("version", 1))
+        requirement = DesignRequirement(
+            dimensions=dims,
+            version=req_data.get("version", 1),
+            product_name=req_data.get("product_name", ""),
+            three_view_desc=req_data.get("three_view_desc", ""),
+            scene_desc=req_data.get("scene_desc", ""),
+        )
 
     return Session(
         id=data["id"],

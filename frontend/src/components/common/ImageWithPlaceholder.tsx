@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 
 interface ImageWithPlaceholderProps {
   src: string;
@@ -15,13 +15,16 @@ export default function ImageWithPlaceholder({
 }: ImageWithPlaceholderProps) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
+  const prevSrc = useRef(src);
 
-  useEffect(() => {
+  // Reset state synchronously when src changes (avoids useEffect timing bug with cached images)
+  if (prevSrc.current !== src) {
+    prevSrc.current = src;
     setLoaded(false);
     setErrored(false);
-  }, [src]);
+  }
 
-  if (errored) {
+  if (!src || errored) {
     return (
       <div
         className={`flex flex-col items-center justify-center gap-3 bg-gray-100 ${className}`}
