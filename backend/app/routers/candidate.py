@@ -17,17 +17,18 @@ router = APIRouter(tags=["candidate"])
 
 logger = logging.getLogger(__name__)
 
+LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 
 class GenerateRequest(BaseModel):
     session_id: str
-    image_model: str | None = None  # "doubao" or "openai", defaults to config
-    candidate_count: int = 3  # 1-5
+    image_model: str | None = None
+    candidate_count: int = 3
 
 
 class RegenerateImageRequest(BaseModel):
     session_id: str
     candidate_id: str
-    view: str  # "orthographic" | "render"
     image_model: str | None = None
 
 
@@ -55,60 +56,31 @@ async def generate_candidates(req: GenerateRequest):
 
     try:
         prompts = await build_image_prompts(session.requirement, count=count, api_keys=api_keys)
-
         results = await generate_candidate_images(prompts, provider=req.image_model, api_keys=api_keys)
 
-        # Organize results into candidates
-        candidate_map: dict[str, dict] = {}
-        for r in results:
-            cid = r["candidate_id"]
-            if cid not in candidate_map:
-                candidate_map[cid] = {"images": [], "failed_views": [], "prompts": {}}
-
-            if r["status"] == "ok":
-                candidate_map[cid]["images"].append({
-                    "id": r["image_id"],
-                    "image_type": r["view"],
-                    "url": f"/api/candidate/image/{r['image_id']}",
-                    "prompt_used": next(
-                        (p["prompt"] for p in prompts if p["candidate_id"] == cid and p["view"] == r["view"]),
-                        "",
-                    ),
-                })
-            else:
-                candidate_map[cid]["failed_views"].append(r["view"])
-
-            candidate_map[cid]["prompts"][r["view"]] = next(
-                (p["prompt"] for p in prompts if p["candidate_id"] == cid and p["view"] == r["view"]), ""
-            )
-
-        # Build candidate objects
-        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        # Build candidate objects from results
         candidate_ids = [f"c{i+1}" for i in range(count)]
-        variant_labels = {f"c{i+1}": f"方案{letters[i]}" for i in range(count)}
+        prompt_map = {p["candidate_id"]: p["prompt"] for p in prompts}
+        result_map = {r["candidate_id"]: r for r in results}
+
         candidates = []
-        for cid in candidate_ids:
-            if cid in candidate_map:
-                data = candidate_map[cid]
-                status = "complete" if not data["failed_views"] else "partial"
+        for idx, cid in enumerate(candidate_ids):
+            r = result_map.get(cid)
+            if r and r["status"] == "ok":
+                image_url = f"/api/candidate/image/{r['image_id']}"
+                status = "complete"
+            else:
+                image_url = ""
+                status = "failed"
 
-                ortho_url = ""
-                render_url = ""
-                for img in data["images"]:
-                    if img["image_type"] == "orthographic":
-                        ortho_url = img["url"]
-                    elif img["image_type"] == "render":
-                        render_url = img["url"]
-
-                candidates.append({
-                    "id": cid,
-                    "label": variant_labels.get(cid, cid),
-                    "variant_description": "",
-                    "orthographic_url": ortho_url or f"/api/candidate/placeholder/{cid}/orthographic",
-                    "render_url": render_url or f"/api/candidate/placeholder/{cid}/render",
-                    "status": status,
-                    "failed_views": data["failed_views"],
-                })
+            candidates.append({
+                "id": cid,
+                "label": f"方案{LETTERS[idx]}",
+                "variant_description": "",
+                "image_url": image_url,
+                "prompt": prompt_map.get(cid, ""),
+                "status": status,
+            })
 
         session.candidates = candidates
         session.status = "review"
@@ -139,45 +111,28 @@ async def get_image(image_id: str):
 
 @router.post("/candidate/image/regenerate")
 async def regenerate_image(req: RegenerateImageRequest):
-    """Regenerate a single failed image."""
+    """Regenerate a single candidate image."""
     session = session_store.get(req.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session.requirement or not session.candidates:
         raise HTTPException(status_code=400, detail="No candidates to regenerate")
 
-    candidate = None
-    for c in session.candidates:
-        if c["id"] == req.candidate_id:
-            candidate = c
-            break
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+    candidate = _find_candidate(session, req.candidate_id)
+    api_keys = get_user_api_keys()
 
-    prompts_data = await build_image_prompts(session.requirement, api_keys=get_user_api_keys())
-    target_prompt = next(
-        (p for p in prompts_data if p["candidate_id"] == req.candidate_id and p["view"] == req.view),
-        None,
-    )
+    # Rebuild the prompt for this candidate
+    prompts_data = await build_image_prompts(session.requirement, api_keys=api_keys)
+    target_prompt = next((p for p in prompts_data if p["candidate_id"] == req.candidate_id), None)
     if not target_prompt:
-        raise HTTPException(status_code=400, detail="View not found")
+        raise HTTPException(status_code=400, detail="Candidate prompt not found")
 
-    results = await generate_candidate_images([target_prompt], provider=req.image_model, api_keys=get_user_api_keys())
+    results = await generate_candidate_images([target_prompt], provider=req.image_model, api_keys=api_keys)
     result = results[0]
 
     if result["status"] == "ok":
-        new_url = f"/api/candidate/image/{result['image_id']}"
-        if req.view == "orthographic":
-            candidate["orthographic_url"] = new_url
-        else:
-            candidate["render_url"] = new_url
-
-        if req.view in candidate.get("failed_views", []):
-            candidate["failed_views"].remove(req.view)
-
-        if not candidate["failed_views"]:
-            candidate["status"] = "complete"
-
+        candidate["image_url"] = f"/api/candidate/image/{result['image_id']}"
+        candidate["status"] = "complete"
         session_store.update(req.session_id, session)
         return {"candidate": candidate}
     else:
@@ -188,7 +143,7 @@ class IterateRequest(BaseModel):
     session_id: str
     candidate_id: str
     mode: str  # "text_edit" | "image_feedback"
-    updates: dict  # varies by mode
+    updates: dict
     image_model: str | None = None
 
 
@@ -200,13 +155,7 @@ async def iterate_candidate(req: IterateRequest):
     if not session.candidates or not session.requirement:
         raise HTTPException(status_code=400, detail="No candidates or requirement")
 
-    candidate = None
-    for c in session.candidates:
-        if c["id"] == req.candidate_id:
-            candidate = c
-            break
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+    candidate = _find_candidate(session, req.candidate_id)
 
     if req.mode == "text_edit":
         return await _iterate_text_edit(session, candidate, req.updates, req.session_id, req.image_model)
@@ -221,7 +170,6 @@ async def _iterate_text_edit(session, candidate: dict, updates: dict, session_id
     api_keys = get_user_api_keys()
     req = session.requirement
 
-    # Apply updates - updates is {field_key: new_value}
     for dim in req.dimensions:
         for f in dim.fields:
             if f.key in updates:
@@ -229,30 +177,20 @@ async def _iterate_text_edit(session, candidate: dict, updates: dict, session_id
 
     req.version += 1
 
-    # Build prompts for just this candidate
     prompts_data = await build_image_prompts(req, api_keys=api_keys)
-    target_prompts = [p for p in prompts_data if p["candidate_id"] == candidate["id"]]
+    target_prompt = next((p for p in prompts_data if p["candidate_id"] == candidate["id"]), None)
 
-    if not target_prompts:
-        raise HTTPException(status_code=500, detail="Could not build prompts for candidate")
+    if not target_prompt:
+        raise HTTPException(status_code=500, detail="Could not build prompt for candidate")
 
-    # Regenerate both images for this candidate
-    results = await generate_candidate_images(target_prompts, provider=image_model, api_keys=api_keys)
+    results = await generate_candidate_images([target_prompt], provider=image_model, api_keys=api_keys)
+    result = results[0]
 
-    for r in results:
-        if r["status"] == "ok":
-            new_url = f"/api/candidate/image/{r['image_id']}"
-            if r["view"] == "orthographic":
-                candidate["orthographic_url"] = new_url
-            else:
-                candidate["render_url"] = new_url
-            if r["view"] in candidate.get("failed_views", []):
-                candidate["failed_views"].remove(r["view"])
-        else:
-            if r["view"] not in candidate.get("failed_views", []):
-                candidate.setdefault("failed_views", []).append(r["view"])
-
-    candidate["status"] = "complete" if not candidate.get("failed_views") else "partial"
+    if result["status"] == "ok":
+        candidate["image_url"] = f"/api/candidate/image/{result['image_id']}"
+        candidate["status"] = "complete"
+    else:
+        candidate["status"] = "failed"
 
     session_store.update(session_id, session)
     return {"candidate": candidate}
@@ -265,7 +203,6 @@ async def _iterate_image_feedback(session, candidate: dict, updates: dict, sessi
     if not annotation_text:
         raise HTTPException(status_code=400, detail="annotation_text is required for image_feedback mode")
 
-    # Build current requirement summary
     fields_summary = ""
     for dim in session.requirement.dimensions:
         fields_summary += f"\n{dim.label}:\n"
@@ -310,10 +247,9 @@ async def _iterate_image_feedback(session, candidate: dict, updates: dict, sessi
 
             modifications = json.loads(content)
 
-            # Only keep modifications with valid field keys
             valid_keys = {f.key for dim in session.requirement.dimensions for f in dim.fields}
             modifications = {k: str(v) for k, v in modifications.items() if k in valid_keys}
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to interpret image feedback for session %s", session_id)
         raise HTTPException(status_code=500, detail="反馈处理失败，请重试")
 
@@ -321,3 +257,10 @@ async def _iterate_image_feedback(session, candidate: dict, updates: dict, sessi
         return {"candidate": candidate, "message": "未识别到需要修改的内容"}
 
     return await _iterate_text_edit(session, candidate, modifications, session_id, image_model)
+
+
+def _find_candidate(session, candidate_id: str) -> dict:
+    for c in session.candidates:
+        if c["id"] == candidate_id:
+            return c
+    raise HTTPException(status_code=404, detail="Candidate not found")

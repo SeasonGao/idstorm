@@ -6,7 +6,7 @@ import IterationPanel from "./IterationPanel";
 interface CandidateCardProps {
   candidate: Candidate;
   sessionId: string;
-  onRegenerateImage: (view: string) => void;
+  onRegenerateImage: () => void;
   onIterate: (mode: "text_edit" | "image_feedback", updates: any) => Promise<Candidate>;
   onIterateSuccess: () => void;
 }
@@ -19,8 +19,7 @@ export default function CandidateCard({
   onIterateSuccess,
 }: CandidateCardProps) {
   const [showIteration, setShowIteration] = useState(false);
-  const orthographicFailed = candidate.failed_views.includes("orthographic");
-  const renderFailed = candidate.failed_views.includes("render");
+  const isFailed = candidate.status === "failed";
 
   return (
     <div className="rounded-xl bg-white shadow-md border border-gray-100 overflow-hidden">
@@ -36,44 +35,15 @@ export default function CandidateCard({
         </div>
       </div>
 
-      {/* Images */}
-      <div className="grid grid-cols-2 gap-4 p-5">
-        {/* Orthographic View */}
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            三视图
-          </span>
-          <div className="h-64 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden">
-            <ImageWithPlaceholder
-              src={candidate.orthographic_url}
-              alt={`${candidate.label} 三视图`}
-              className="h-full w-full"
-              onRegenerate={
-                orthographicFailed
-                  ? () => onRegenerateImage("orthographic")
-                  : undefined
-              }
-            />
-          </div>
-        </div>
-
-        {/* Render View */}
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            展示图
-          </span>
-          <div className="h-64 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden">
-            <ImageWithPlaceholder
-              src={candidate.render_url}
-              alt={`${candidate.label} 展示图`}
-              className="h-full w-full"
-              onRegenerate={
-                renderFailed
-                  ? () => onRegenerateImage("render")
-                  : undefined
-              }
-            />
-          </div>
+      {/* Single composite image */}
+      <div className="p-5">
+        <div className="rounded-lg bg-gray-50 border border-gray-200 overflow-hidden">
+          <ImageWithPlaceholder
+            src={candidate.image_url}
+            alt={`${candidate.label} 设计方案`}
+            className="h-auto w-full"
+            onRegenerate={isFailed ? onRegenerateImage : undefined}
+          />
         </div>
       </div>
 

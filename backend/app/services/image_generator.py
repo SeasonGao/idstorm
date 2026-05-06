@@ -166,24 +166,23 @@ async def generate_candidate_images(
 ) -> list[dict]:
     """Generate all images for candidates with retry and partial failure handling.
 
-    prompts: list of {"candidate_id": "c1", "view": "orthographic", "prompt": "..."}
+    prompts: list of {"candidate_id": "c1", "prompt": "..."}
     provider: "doubao" or "openai". Defaults to settings.default_image_provider.
     api_keys: Optional dict with user-provided API keys.
 
     Returns list of results:
-    - On success: {"candidate_id": ..., "view": ..., "image_id": ..., "file_path": ..., "status": "ok"}
-    - On failure after retries: {"candidate_id": ..., "view": ..., "status": "failed", "error": ...}
+    - On success: {"candidate_id": ..., "image_id": ..., "file_path": ..., "status": "ok"}
+    - On failure after retries: {"candidate_id": ..., "status": "failed", "error": ...}
     """
     resolved_provider = provider or _get_default_provider()
 
-    async def generate_with_retry(prompt_text: str, candidate_id: str, view: str, retries: int = 2) -> dict:
+    async def generate_with_retry(prompt_text: str, candidate_id: str, retries: int = 2) -> dict:
         last_error = None
         for attempt in range(retries + 1):
             try:
                 image_id, file_path = await generate_image(prompt_text, resolved_provider, api_keys=api_keys)
                 return {
                     "candidate_id": candidate_id,
-                    "view": view,
                     "image_id": image_id,
                     "file_path": file_path,
                     "status": "ok",
@@ -191,20 +190,19 @@ async def generate_candidate_images(
             except Exception as e:
                 last_error = str(e)
                 logger.warning(
-                    "Image generation failed (attempt %d/%d) for %s/%s [%s]: %s",
-                    attempt + 1, retries + 1, candidate_id, view, resolved_provider, e,
+                    "Image generation failed (attempt %d/%d) for %s [%s]: %s",
+                    attempt + 1, retries + 1, candidate_id, resolved_provider, e,
                 )
                 if attempt < retries:
                     await asyncio.sleep(3 * (attempt + 1))
 
         return {
             "candidate_id": candidate_id,
-            "view": view,
             "status": "failed",
             "error": last_error,
         }
 
-    tasks = [generate_with_retry(p["prompt"], p["candidate_id"], p["view"]) for p in prompts]
+    tasks = [generate_with_retry(p["prompt"], p["candidate_id"]) for p in prompts]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     processed = []
@@ -212,7 +210,6 @@ async def generate_candidate_images(
         if isinstance(result, Exception):
             processed.append({
                 "candidate_id": prompts[i]["candidate_id"],
-                "view": prompts[i]["view"],
                 "status": "failed",
                 "error": str(result),
             })

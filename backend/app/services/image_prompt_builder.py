@@ -1,7 +1,7 @@
-"""Image prompt builder service for generating detailed image generation prompts.
+"""Image prompt builder service.
 
-Constructs prompts from structured design requirements, producing
-orthographic and render-style prompts for each candidate variant.
+Generates one composite prompt per candidate variant, combining
+three-view and scene showcase into a single image with top-bottom layout.
 """
 
 import json
@@ -20,62 +20,87 @@ async def build_image_prompts(
     count: int = 3,
     api_keys: dict | None = None,
 ) -> list[dict]:
-    """Build image prompts (count candidates x 2 views) from the design requirement.
+    """Build N composite prompts (one per candidate) from the design requirement.
 
     Returns list of dicts:
-        [{"candidate_id": "c1", "view": "orthographic", "prompt": "..."}, ...]
+        [{"candidate_id": "c1", "prompt": "..."}, ...]
     """
 
-    # Extract fields into a flat dict
-    fields: dict[str, str] = {}
-    for dim in requirement.dimensions:
-        for f in dim.fields:
-            fields[f.key] = f.value
+    product_name = requirement.product_name or "产品"
+    three_view_desc = requirement.three_view_desc
+    scene_desc = requirement.scene_desc
 
-    # Get variant suggestions from DeepSeek
-    variants = await _suggest_variants(fields, count, api_keys)
+    # Fallback: synthesize from dimension fields if descriptions are empty
+    if not three_view_desc or not scene_desc:
+        fields: dict[str, str] = {}
+        for dim in requirement.dimensions:
+            for f in dim.fields:
+                fields[f.key] = f.value
+        if not three_view_desc:
+            three_view_desc = _fallback_three_view(fields)
+        if not scene_desc:
+            scene_desc = _fallback_scene(fields)
+
+    # Get variant modifiers from DeepSeek
+    variants = await _suggest_variants(product_name, three_view_desc, scene_desc, count, api_keys)
 
     prompts: list[dict] = []
     for variant in variants:
-        # Orthographic view prompt
-        ortho_prompt = (
-            f"技术三视图（正视图、侧视图、俯视图排列在同一画布上）"
-            f"的一个{fields.get('morphology', '产品')}产品。"
-            f"风格：干净的线条绘制，{fields.get('line_style', '简约')}，白色背景上的技术插图。"
-            f"尺寸比例：{fields.get('proportions', '适中')}。"
-            f"材质标示：{fields.get('material', '未指定')}，{fields.get('surface_treatment', '标准处理')}。"
-            f"主色调：{fields.get('color_palette', '中性色')}。"
-            f"变体：{variant['modifier']}。"
-            f"无背景、无人物、无环境。纯技术绘图风格。"
-        )
-
-        # Showcase render prompt
-        render_prompt = (
-            f"逼真的产品摄影照，{fields.get('morphology', '产品')}产品。"
-            f"{variant['modifier']}。"
-            f"材质：{fields.get('material', '未指定')}，{fields.get('surface_treatment', '标准处理')}。"
-            f"色彩：{fields.get('color_palette', '中性色')}。"
-            f"场景：{fields.get('usage_context', '日常使用')}，专业影棚灯光。"
-            f"目标市场：{fields.get('target_audience', '大众消费者')}。品牌感：{fields.get('brand_tone', '现代简约')}。"
-            f"白色/浅灰渐变影棚背景，专业产品摄影，浅景深，高清画质。"
-        )
-
+        modifier = variant.get("modifier", "")
+        prompt = _build_composite_prompt(product_name, three_view_desc, scene_desc, modifier)
         prompts.append({
             "candidate_id": variant["id"],
-            "view": "orthographic",
-            "prompt": ortho_prompt,
-        })
-        prompts.append({
-            "candidate_id": variant["id"],
-            "view": "render",
-            "prompt": render_prompt,
+            "prompt": prompt,
         })
 
     return prompts
 
 
-async def _suggest_variants(fields: dict, count: int = 3, api_keys: dict | None = None) -> list[dict]:
-    """Ask DeepSeek to suggest N micro-variants."""
+def _build_composite_prompt(
+    product_name: str,
+    three_view_desc: str,
+    scene_desc: str,
+    modifier: str,
+) -> str:
+    """Build a single composite prompt for top-bottom layout image."""
+    modifier_part = f"\n{modifier}。" if modifier else ""
+    return (
+        f'生成以下两张关于"{product_name}"的图片，通过上下结构排版。'
+        f'两张图片描述的"{product_name}"必须保持一致性：\n'
+        f'\n'
+        f'图片一："{product_name}"的三视图，包含正视图、侧视图、俯视图，'
+        f"背景为干净的纯白色。{three_view_desc}{modifier_part}\n"
+        f'\n'
+        f'图片二："{product_name}"的展示图，{scene_desc}{modifier_part}'
+    )
+
+
+def _fallback_three_view(fields: dict) -> str:
+    parts = []
+    if fields.get("form_size"):
+        parts.append(fields["form_size"])
+    if fields.get("material_color"):
+        parts.append(fields["material_color"])
+    return "，".join(parts) if parts else "产品渲染风格，柔和影棚灯光，高分辨率，背景无阴影，技术绘图美学"
+
+
+def _fallback_scene(fields: dict) -> str:
+    parts = []
+    if fields.get("scenario"):
+        parts.append(fields["scenario"])
+    if fields.get("brand"):
+        parts.append(fields["brand"])
+    return "，".join(parts) if parts else "专业产品摄影风格，柔和自然光，浅景深，高清画质"
+
+
+async def _suggest_variants(
+    product_name: str,
+    three_view_desc: str,
+    scene_desc: str,
+    count: int = 3,
+    api_keys: dict | None = None,
+) -> list[dict]:
+    """Ask DeepSeek to suggest N micro-variant modifiers."""
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     examples = "\n".join(
         f'  {{"id": "c{i+1}", "label": "方案{letters[i]}", "modifier": "示例修饰语{i+1}"}}'
@@ -83,20 +108,18 @@ async def _suggest_variants(fields: dict, count: int = 3, api_keys: dict | None 
         for i in range(min(count, 3))
     )
 
-    variant_prompt = f"""基于以下设计需求，建议{count}个微调变种方案。每个变种保持核心风格不变，只在一个次要属性上有差异。
+    variant_prompt = f"""基于以下产品设计描述，建议{count}个微调变种方案。每个变种保持核心设计不变，只在一个次要属性上有细微差异（如色彩微调、材质细节变化、造型微调等）。
 
-设计需求：
-- 形态：{fields.get('morphology', '')}
-- 比例：{fields.get('proportions', '')}
-- 材质：{fields.get('material', '')}
-- 色彩：{fields.get('color_palette', '')}
+产品名称：{product_name}
+三视图描述：{three_view_desc[:300]}
+场景描述：{scene_desc[:300]}
 
 输出JSON数组格式：
 [
 {examples}
 ]
 
-只输出JSON数组，不要其他文字。确保{count}个变种的modifier描述简洁（15字以内），且保持微调而非大改。"""
+只输出JSON数组，不要其他文字。确保{count}个变种的modifier描述简洁（20字以内），且保持微调而非大改。每个modifier应该同时适用于三视图和场景展示图。"""
 
     api_key = (api_keys or {}).get("deepseek_api_key") or settings.deepseek_api_key
 
@@ -122,7 +145,6 @@ async def _suggest_variants(fields: dict, count: int = 3, api_keys: dict | None 
                 content = content.strip()
 
             variants = json.loads(content)
-            # Ensure we have the requested count
             if len(variants) < count:
                 for i in range(len(variants), count):
                     variants.append({
@@ -133,7 +155,6 @@ async def _suggest_variants(fields: dict, count: int = 3, api_keys: dict | None 
             return variants[:count]
     except Exception:
         logger.warning("Variant suggestion failed, using fallback variants")
-        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         fallback_modifiers = ["标准设计", "色彩微调，质感变化", "细节调整，功能元素", "形态简化，材质混合", "大胆配色，造型突破"]
         return [
             {"id": f"c{i+1}", "label": f"方案{letters[i]}", "modifier": fallback_modifiers[i % len(fallback_modifiers)]}

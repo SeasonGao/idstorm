@@ -21,3 +21,6 @@ class Dimension:
 class DesignRequirement:
     dimensions: list[Dimension] = field(default_factory=list)
     version: int = 1
+    product_name: str = ""
+    three_view_desc: str = ""
+    scene_desc: str = ""

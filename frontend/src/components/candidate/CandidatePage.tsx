@@ -126,8 +126,8 @@ export default function CandidatePage({
                     key={candidate.id}
                     candidate={candidate}
                     sessionId={sessionId}
-                    onRegenerateImage={(view) =>
-                      regenerateImage(sessionId, candidate.id, view)
+                    onRegenerateImage={() =>
+                      regenerateImage(sessionId, candidate.id)
                     }
                     onIterate={(mode, updates) =>
                       iterate(sessionId, candidate.id, mode, updates)

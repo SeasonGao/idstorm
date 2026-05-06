@@ -38,6 +38,9 @@ export interface DesignRequirement {
   session_id: string;
   dimensions: Record<string, Dimension>;
   version: number;
+  product_name: string;
+  three_view_desc: string;
+  scene_desc: string;
 }
 
 export interface CandidateImage {
@@ -50,10 +53,9 @@ export interface Candidate {
   id: string;
   label: string;
   variant_description: string;
-  orthographic_url: string;
-  render_url: string;
-  status: "complete" | "partial";
-  failed_views: string[];
+  image_url: string;
+  prompt: string;
+  status: "complete" | "failed";
 }
 
 export interface GenerateResponse {

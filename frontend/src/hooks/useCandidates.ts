@@ -43,12 +43,11 @@ export function useCandidates() {
   }, [imageModel]);
 
   const regenerateImage = useCallback(
-    async (sessionId: string, candidateId: string, view: string) => {
+    async (sessionId: string, candidateId: string) => {
       try {
         const res = await apiClient.post("/candidate/image/regenerate", {
           session_id: sessionId,
           candidate_id: candidateId,
-          view,
           image_model: imageModel,
         });
         const updated = res.data.candidate;
