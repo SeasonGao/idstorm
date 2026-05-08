@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { Candidate } from "../../types";
+import { useState, useEffect } from "react";
+import type { Candidate, CandidateImageEntry } from "../../types";
 import ImageWithPlaceholder from "../common/ImageWithPlaceholder";
 
 interface CandidateCardProps {
@@ -23,44 +23,53 @@ export default function CandidateCard({
   const images = candidate.images || [];
   const hasImage = !!candidate.image_url;
 
-  // Quick modify input (always visible below main image)
-  const [quickFeedback, setQuickFeedback] = useState("");
-  const [isQuickIterating, setIsQuickIterating] = useState(false);
+  // Build a flat display list: if images is empty but image_url exists, create a synthetic entry
+  const displayList: CandidateImageEntry[] = images.length > 0
+    ? images
+    : hasImage
+      ? [{ id: "__current__", url: candidate.image_url, feedback: null, parent_image_id: null, created_at: "" }]
+      : [];
 
-  // Per-history-image feedback inputs
+  // Currently selected version index (defaults to latest = last)
+  const [selectedIdx, setSelectedIdx] = useState(displayList.length - 1);
+
+  // Reset selection when images change (new iteration)
+  useEffect(() => {
+    setSelectedIdx(displayList.length - 1);
+  }, [images.length, candidate.image_url]);
+
+  const selectedImage = displayList[selectedIdx] || displayList[displayList.length - 1];
+
+  // Per-image feedback text inputs
   const [feedbackTexts, setFeedbackTexts] = useState<Record<string, string>>({});
   const [iteratingImageId, setIteratingImageId] = useState<string | null>(null);
+  const [isQuickIterating, setIsQuickIterating] = useState(false);
 
-  // Use latest image as base for quick modify
-  const latestImageId = images.length > 0 ? images[images.length - 1].id : null;
+  const handleSubmit = async (baseImageId: string | null, feedback: string) => {
+    if (!feedback.trim()) return;
 
-  const handleQuickSubmit = async () => {
-    const text = quickFeedback.trim();
-    if (!text) return;
-    setIsQuickIterating(true);
-    try {
-      await onImageIterate(latestImageId, text);
-      setQuickFeedback("");
-      onIterateSuccess();
-    } catch {
-      // Error handled by hook
-    } finally {
-      setIsQuickIterating(false);
+    // Determine which state setter to use
+    const isQuick = baseImageId === "__quick__";
+    if (isQuick) {
+      setIsQuickIterating(true);
+    } else {
+      setIteratingImageId(baseImageId);
     }
-  };
 
-  const handleHistorySubmit = async (baseImageId: string) => {
-    const text = feedbackTexts[baseImageId]?.trim();
-    if (!text) return;
-    setIteratingImageId(baseImageId);
     try {
-      await onImageIterate(baseImageId, text);
+      // Use null for synthetic entries so backend falls back to latest real image
+      const realId = baseImageId === "__quick__" || baseImageId === "__current__" ? null : baseImageId;
+      await onImageIterate(realId, feedback.trim());
       setFeedbackTexts((prev) => ({ ...prev, [baseImageId]: "" }));
       onIterateSuccess();
     } catch {
       // Error handled by hook
     } finally {
-      setIteratingImageId(null);
+      if (isQuick) {
+        setIsQuickIterating(false);
+      } else {
+        setIteratingImageId(null);
+      }
     }
   };
 
@@ -84,99 +93,95 @@ export default function CandidateCard({
       </div>
 
       {/* Main image display */}
-      {hasImage && (
+      {selectedImage && (
         <div className="p-5 pb-3">
           <div className="rounded-lg bg-gray-50 border border-gray-200 overflow-hidden">
             <ImageWithPlaceholder
-              src={candidate.image_url}
-              alt={`${candidate.label} 设计方案`}
+              src={selectedImage.url}
+              alt={`${candidate.label} - 版本 ${selectedIdx + 1}`}
               className="h-auto w-full"
               onRegenerate={isFailed ? onRegenerateImage : undefined}
             />
           </div>
+          {/* Show feedback for selected version */}
+          {selectedImage.feedback && (
+            <div className="mt-2 text-xs text-gray-500">
+              修改意见：{selectedImage.feedback}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Quick modify input - always visible when image exists */}
-      {hasImage && (
+      {/* Version tabs */}
+      {displayList.length > 1 && (
+        <div className="px-5 pb-2">
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {displayList.map((img, idx) => (
+              <button
+                key={img.id}
+                onClick={() => setSelectedIdx(idx)}
+                className={`group relative flex-shrink-0 rounded-lg border-2 overflow-hidden transition-all ${
+                  idx === selectedIdx
+                    ? "border-blue-500 ring-1 ring-blue-500"
+                    : "border-gray-200 hover:border-gray-400"
+                }`}
+                title={img.feedback || `版本 ${idx + 1}`}
+              >
+                <img
+                  src={img.url}
+                  alt={`V${idx + 1}`}
+                  className="w-16 h-16 object-cover"
+                />
+                <div className={`absolute bottom-0 left-0 right-0 text-center text-[10px] font-bold py-0.5 ${
+                  idx === selectedIdx
+                    ? "bg-blue-500 text-white"
+                    : "bg-black/50 text-white group-hover:bg-black/70"
+                }`}>
+                  V{idx + 1}
+                </div>
+                {/* Latest badge */}
+                {idx === displayList.length - 1 && (
+                  <div className="absolute top-0 right-0 text-[8px] bg-green-500 text-white px-1 rounded-bl">
+                    最新
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modification input for selected version */}
+      {hasImage && selectedImage && (
         <div className="px-5 pb-4">
+          <div className="text-xs text-gray-400 mb-1.5">
+            {displayList.length > 1
+              ? `基于 V${selectedIdx + 1} 修改`
+              : "输入修改意见，基于当前图片微调"}
+          </div>
           <div className="flex gap-2">
             <input
-              value={quickFeedback}
-              onChange={(e) => setQuickFeedback(e.target.value)}
-              placeholder="输入修改意见，基于当前图片微调..."
+              value={feedbackTexts[selectedImage.id] || ""}
+              onChange={(e) =>
+                setFeedbackTexts((prev) => ({
+                  ...prev,
+                  [selectedImage.id]: e.target.value,
+                }))
+              }
+              placeholder="描述修改意见..."
               className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              disabled={isQuickIterating}
+              disabled={iteratingImageId === selectedImage.id || isQuickIterating}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleQuickSubmit();
+                if (e.key === "Enter") handleSubmit(selectedImage.id, feedbackTexts[selectedImage.id] || "");
               }}
             />
             <button
-              onClick={handleQuickSubmit}
-              disabled={isQuickIterating || !quickFeedback.trim()}
+              onClick={() => handleSubmit(selectedImage.id, feedbackTexts[selectedImage.id] || "")}
+              disabled={iteratingImageId === selectedImage.id || isQuickIterating || !feedbackTexts[selectedImage.id]?.trim()}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
             >
-              {isQuickIterating ? "生成中..." : "生成新版本"}
+              {iteratingImageId === selectedImage.id || isQuickIterating ? "生成中..." : "生成新版本"}
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Image History Timeline (only when multiple versions exist) */}
-      {images.length > 1 && (
-        <div className="border-t border-gray-100 px-5 py-4">
-          <div className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
-            历史版本
-          </div>
-          <div className="space-y-3">
-            {images.slice(0, -1).reverse().map((img) => {
-              const isIterating = iteratingImageId === img.id;
-
-              return (
-                <div key={img.id} className="flex gap-3">
-                  <img
-                    src={img.url}
-                    alt={`历史版本`}
-                    className="flex-shrink-0 w-16 h-16 rounded-lg border border-gray-200 object-cover"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {img.feedback ? (
-                        <span className="text-xs text-gray-500 truncate max-w-[200px]">
-                          {img.feedback}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">初始版本</span>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <input
-                        value={feedbackTexts[img.id] || ""}
-                        onChange={(e) =>
-                          setFeedbackTexts((prev) => ({
-                            ...prev,
-                            [img.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="基于此图修改..."
-                        className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                        disabled={isIterating}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleHistorySubmit(img.id);
-                        }}
-                      />
-                      <button
-                        onClick={() => handleHistorySubmit(img.id)}
-                        disabled={isIterating || !feedbackTexts[img.id]?.trim()}
-                        className="rounded bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isIterating ? "..." : "生成"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}

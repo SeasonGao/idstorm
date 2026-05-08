@@ -1,0 +1,32 @@
+{
+  "id": "11df647a-f490-4187-aa6f-afe835cff82e",
+  "initial_idea": "茶杯",
+  "status": "dialogue",
+  "created_at": "2026-05-08T17:50:50.928669",
+  "messages": [
+    {
+      "role": "user",
+      "content": "茶杯",
+      "timestamp": "2026-05-08T17:50:50.938192"
+    },
+    {
+      "role": "assistant",
+      "content": "请描述您心目中这个茶杯的整体轮廓是怎样的？",
+      "timestamp": "2026-05-08T17:50:55.092959",
+      "options": [
+        "简约圆柱",
+        "上宽下窄",
+        "圆润饱满",
+        "高挑修长",
+        "几何棱角"
+      ]
+    }
+  ],
+  "requirement": null,
+  "candidates": null,
+  "current_dimension": "form_size",
+  "completed_dimensions": [],
+  "dimension_summaries": {},
+  "dimension_message_start": 0,
+  "archived_messages": []
+}

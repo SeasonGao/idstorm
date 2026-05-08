@@ -1,0 +1,32 @@
+{
+  "id": "676459bf-49e7-4a46-ac88-63fd9f971bb6",
+  "initial_idea": "电动车",
+  "status": "dialogue",
+  "created_at": "2026-05-08T17:50:39.184566",
+  "messages": [
+    {
+      "role": "user",
+      "content": "电动车",
+      "timestamp": "2026-05-08T17:50:39.196289"
+    },
+    {
+      "role": "assistant",
+      "content": "请描述您心目中这款电动车的外观轮廓，它给您怎样的第一印象？",
+      "timestamp": "2026-05-08T17:50:44.051832",
+      "options": [
+        "流线动感",
+        "方正硬朗",
+        "圆润柔和",
+        "低趴宽体",
+        "未来科幻"
+      ]
+    }
+  ],
+  "requirement": null,
+  "candidates": null,
+  "current_dimension": "form_size",
+  "completed_dimensions": [],
+  "dimension_summaries": {},
+  "dimension_message_start": 0,
+  "archived_messages": []
+}
