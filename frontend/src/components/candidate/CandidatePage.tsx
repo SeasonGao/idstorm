@@ -20,7 +20,7 @@ export default function CandidatePage({
 }: CandidatePageProps) {
   const {
     candidates, isGenerating, error, loadExisting, generate, regenerateImage, iterate,
-    imageModel, setImageModel,
+    imageIterate, imageModel, setImageModel,
   } = useCandidates();
 
   useEffect(() => {
@@ -131,6 +131,9 @@ export default function CandidatePage({
                     }
                     onIterate={(mode, updates) =>
                       iterate(sessionId, candidate.id, mode, updates)
+                    }
+                    onImageIterate={(baseImageId, feedbackText) =>
+                      imageIterate(sessionId, candidate.id, baseImageId, feedbackText)
                     }
                     onIterateSuccess={handleIterateSuccess}
                   />

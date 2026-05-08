@@ -49,6 +49,14 @@ export interface CandidateImage {
   url: string;
 }
 
+export interface CandidateImageEntry {
+  id: string;
+  url: string;
+  feedback: string | null;
+  parent_image_id: string | null;
+  created_at: string;
+}
+
 export interface Candidate {
   id: string;
   label: string;
@@ -56,6 +64,7 @@ export interface Candidate {
   image_url: string;
   prompt: string;
   status: "complete" | "failed";
+  images: CandidateImageEntry[];
 }
 
 export interface GenerateResponse {

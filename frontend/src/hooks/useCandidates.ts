@@ -20,6 +20,7 @@ export function useCandidates() {
           ...c,
           image_url: c.image_url || c.orthographic_url || "",
           status: c.status === "partial" ? "failed" : c.status,
+          images: c.images || [],
         }));
         setCandidates(mapped);
         return true;
@@ -95,8 +96,35 @@ export function useCandidates() {
     [imageModel]
   );
 
+  const imageIterate = useCallback(
+    async (
+      sessionId: string,
+      candidateId: string,
+      baseImageId: string | null,
+      feedbackText: string
+    ) => {
+      try {
+        const res = await apiClient.post("/candidate/image-iterate", {
+          session_id: sessionId,
+          candidate_id: candidateId,
+          base_image_id: baseImageId,
+          feedback_text: feedbackText,
+          image_model: imageModel,
+        });
+        const updated = res.data.candidate;
+        setCandidates((prev) =>
+          prev.map((c) => (c.id === updated.id ? updated : c))
+        );
+        return updated;
+      } catch (err: unknown) {
+        throw new Error(err instanceof Error ? err.message : "图像迭代失败");
+      }
+    },
+    [imageModel]
+  );
+
   return {
     candidates, isGenerating, error, loadExisting, generate, regenerateImage, iterate,
-    imageModel, setImageModel,
+    imageIterate, imageModel, setImageModel,
   };
 }

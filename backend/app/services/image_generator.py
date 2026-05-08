@@ -159,6 +159,95 @@ async def generate_image(prompt: str, provider: str | None = None, api_keys: dic
         raise ValueError(f"Unknown image provider: {provider}")
 
 
+# ---------------------------------------------------------------------------
+# Image-to-Image (Doubao Seedream)
+# ---------------------------------------------------------------------------
+
+async def _generate_doubao_img2img(
+    base_image_path: str, prompt: str, api_key: str | None = None,
+) -> tuple[str, str]:
+    """Generate an image using a base image + text prompt (image-to-image).
+
+    Returns (image_id, file_path).
+    """
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+
+    key = api_key or settings.doubao_api_key
+
+    with open(base_image_path, "rb") as f:
+        image_base64 = base64.b64encode(f.read()).decode("utf-8")
+    image_data_uri = f"data:image/png;base64,{image_base64}"
+
+    payload = {
+        "model": settings.doubao_model,
+        "prompt": prompt,
+        "image": image_data_uri,
+        "size": settings.doubao_image_size,
+        "output_format": "png",
+        "watermark": False,
+    }
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            f"{settings.doubao_base_url}/images/generations",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+        if response.status_code != 200:
+            logger.error("[DOUBAO img2img] status=%s body=%s", response.status_code, response.text[:500])
+        response.raise_for_status()
+        result = response.json()
+
+    image_data = result["data"][0]
+    image_id = str(uuid.uuid4())
+
+    if "url" in image_data:
+        async with httpx.AsyncClient(timeout=60.0) as dl_client:
+            img_response = await dl_client.get(image_data["url"])
+            img_response.raise_for_status()
+            file_path = os.path.join(IMAGES_DIR, f"{image_id}.png")
+            with open(file_path, "wb") as f:
+                f.write(img_response.content)
+    elif "b64_json" in image_data:
+        file_path = os.path.join(IMAGES_DIR, f"{image_id}.png")
+        with open(file_path, "wb") as f:
+            f.write(base64.b64decode(image_data["b64_json"]))
+    else:
+        raise ValueError("Unexpected Doubao img2img response format")
+
+    return image_id, file_path
+
+
+async def generate_image_to_image(
+    base_image_path: str,
+    prompt: str,
+    provider: str | None = None,
+    api_keys: dict | None = None,
+) -> tuple[str, str]:
+    """Generate a new image based on an existing image + text prompt.
+
+    Args:
+        base_image_path: Path to the base image file on disk.
+        prompt: Modification text prompt.
+        provider: Currently only "doubao" is supported for img2img.
+        api_keys: Optional dict with user-provided API keys.
+
+    Returns (image_id, file_path).
+    """
+    provider = provider or _get_default_provider()
+    keys = api_keys or {}
+
+    if provider == "doubao":
+        return await _generate_doubao_img2img(base_image_path, prompt, api_key=keys.get("doubao_api_key"))
+    else:
+        # OpenAI doesn't support img2img in the same way; fall back to doubao
+        logger.warning("img2img not supported for provider '%s', falling back to doubao", provider)
+        return await _generate_doubao_img2img(base_image_path, prompt, api_key=keys.get("doubao_api_key"))
+
+
 async def generate_candidate_images(
     prompts: list[dict],
     provider: str | None = None,

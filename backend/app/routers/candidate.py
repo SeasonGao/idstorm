@@ -9,9 +9,10 @@ from pydantic import BaseModel
 
 from app.config import IMAGES_DIR, settings
 from app.routers.config import get_user_api_keys
-from app.services.image_generator import generate_candidate_images
+from app.services.image_generator import generate_candidate_images, generate_image_to_image
 from app.services.image_prompt_builder import build_image_prompts
 from app.store.session_store import session_store
+from datetime import datetime
 
 router = APIRouter(tags=["candidate"])
 
@@ -80,6 +81,13 @@ async def generate_candidates(req: GenerateRequest):
                 "image_url": image_url,
                 "prompt": prompt_map.get(cid, ""),
                 "status": status,
+                "images": [{
+                    "id": r["image_id"] if r and r["status"] == "ok" else "",
+                    "url": image_url,
+                    "feedback": None,
+                    "parent_image_id": None,
+                    "created_at": datetime.now().isoformat(),
+                }] if status == "complete" else [],
             })
 
         session.candidates = candidates
@@ -131,8 +139,19 @@ async def regenerate_image(req: RegenerateImageRequest):
     result = results[0]
 
     if result["status"] == "ok":
-        candidate["image_url"] = f"/api/candidate/image/{result['image_id']}"
+        new_url = f"/api/candidate/image/{result['image_id']}"
+        candidate["image_url"] = new_url
         candidate["status"] = "complete"
+        # Append to image history
+        images = candidate.get("images", [])
+        images.append({
+            "id": result["image_id"],
+            "url": new_url,
+            "feedback": None,
+            "parent_image_id": images[-1]["id"] if images else None,
+            "created_at": datetime.now().isoformat(),
+        })
+        candidate["images"] = images
         session_store.update(req.session_id, session)
         return {"candidate": candidate}
     else:
@@ -145,6 +164,84 @@ class IterateRequest(BaseModel):
     mode: str  # "text_edit" | "image_feedback"
     updates: dict
     image_model: str | None = None
+
+
+class ImageIterateRequest(BaseModel):
+    session_id: str
+    candidate_id: str
+    base_image_id: str | None = None  # Which image to use as base; defaults to latest
+    feedback_text: str
+    image_model: str | None = None
+
+
+@router.post("/candidate/image-iterate")
+async def image_iterate(req: ImageIterateRequest):
+    """Iterate on a candidate using image-to-image: base image + feedback text."""
+    session = session_store.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.candidates:
+        raise HTTPException(status_code=400, detail="No candidates")
+
+    candidate = _find_candidate(session, req.candidate_id)
+    images = candidate.get("images", [])
+
+    # Find the base image
+    base_entry = None
+    if req.base_image_id and images:
+        base_entry = next((img for img in images if img["id"] == req.base_image_id), None)
+        if not base_entry:
+            raise HTTPException(status_code=400, detail="Base image not found")
+    elif images:
+        base_entry = images[-1]  # Default to latest image
+    elif candidate.get("image_url"):
+        # Backward compat: old sessions have no images array but do have image_url
+        image_id = candidate["image_url"].rsplit("/", 1)[-1]
+        base_entry = {"id": image_id, "url": candidate["image_url"]}
+    else:
+        raise HTTPException(status_code=400, detail="No image to iterate from")
+
+    # Resolve the base image file path on disk
+    base_image_id = base_entry["id"]
+    base_image_path = _resolve_image_path(base_image_id)
+    if not base_image_path:
+        raise HTTPException(status_code=400, detail="Base image file not found on disk")
+
+    api_keys = get_user_api_keys()
+
+    try:
+        new_image_id, _ = await generate_image_to_image(
+            base_image_path, req.feedback_text,
+            provider=req.image_model, api_keys=api_keys,
+        )
+    except Exception as e:
+        logger.exception("Image-to-image iteration failed for session %s", req.session_id)
+        raise HTTPException(status_code=500, detail=f"图像迭代失败: {e}")
+
+    new_entry = {
+        "id": new_image_id,
+        "url": f"/api/candidate/image/{new_image_id}",
+        "feedback": req.feedback_text,
+        "parent_image_id": base_entry["id"],
+        "created_at": datetime.now().isoformat(),
+    }
+    images.append(new_entry)
+
+    candidate["images"] = images
+    candidate["image_url"] = new_entry["url"]
+    candidate["status"] = "complete"
+    session_store.update(req.session_id, session)
+
+    return {"candidate": candidate}
+
+
+def _resolve_image_path(image_id: str) -> str | None:
+    """Find the actual file path for an image_id on disk."""
+    for ext in (".png", ".jpg", ".jpeg"):
+        path = os.path.join(IMAGES_DIR, f"{image_id}{ext}")
+        if os.path.exists(path):
+            return path
+    return None
 
 
 @router.post("/candidate/iterate")
@@ -187,8 +284,19 @@ async def _iterate_text_edit(session, candidate: dict, updates: dict, session_id
     result = results[0]
 
     if result["status"] == "ok":
-        candidate["image_url"] = f"/api/candidate/image/{result['image_id']}"
+        new_url = f"/api/candidate/image/{result['image_id']}"
+        candidate["image_url"] = new_url
         candidate["status"] = "complete"
+        # Append to image history
+        images = candidate.get("images", [])
+        images.append({
+            "id": result["image_id"],
+            "url": new_url,
+            "feedback": str(updates),
+            "parent_image_id": images[-1]["id"] if images else None,
+            "created_at": datetime.now().isoformat(),
+        })
+        candidate["images"] = images
     else:
         candidate["status"] = "failed"
 
