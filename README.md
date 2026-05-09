@@ -17,3 +17,6 @@ docker run -d --name idstorm -p 8080:80 idstorm:v1.0
 http://localhost:8080
 
 docker logs -f idstorm
+
+
+docker save -o idstorm.tar idstorm:v1.0

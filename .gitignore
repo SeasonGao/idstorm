@@ -35,5 +35,5 @@ Thumbs.db
 backend/logs/
 backend/user_config.json
 
-
+*.tar
 

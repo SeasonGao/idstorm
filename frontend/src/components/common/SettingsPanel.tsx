@@ -17,28 +17,25 @@ interface KeyField {
 const KEY_FIELDS: KeyField[] = [
   { key: "deepseek_api_key", label: "DeepSeek API Key", placeholder: "sk-..." },
   { key: "doubao_api_key", label: "豆包 API Key", placeholder: "留空则使用默认配置" },
-  // { key: "openai_api_key", label: "OpenAI API Key", placeholder: "sk-..." },
 ];
 
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
+  const [saved, setSaved] = useState<MaskedKeys>({
+    deepseek_api_key: "",
+    doubao_api_key: "",
+    openai_api_key: "",
+  });
   const [keys, setKeys] = useState<Record<string, string>>({
     deepseek_api_key: "",
     doubao_api_key: "",
     openai_api_key: "",
   });
-  const [masked, setMasked] = useState<MaskedKeys | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     apiClient.get("/config/keys").then((res) => {
-      const data = res.data as MaskedKeys;
-      setMasked(data);
-      const prefilled: Record<string, string> = {};
-      for (const f of KEY_FIELDS) {
-        prefilled[f.key] = data[f.key] || "";
-      }
-      setKeys(prefilled);
+      setSaved(res.data);
     });
   }, []);
 
@@ -49,7 +46,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
       const payload: Record<string, string> = {};
       for (const f of KEY_FIELDS) {
         const val = keys[f.key].trim();
-        if (val) {
+        if (val && val !== saved[f.key]) {
           payload[f.key] = val;
         }
       }
@@ -59,13 +56,8 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
         return;
       }
       const res = await apiClient.post("/config/keys", payload);
-      const data = res.data as MaskedKeys;
-      setMasked(data);
-      const prefilled: Record<string, string> = {};
-      for (const f of KEY_FIELDS) {
-        prefilled[f.key] = data[f.key] || "";
-      }
-      setKeys(prefilled);
+      setSaved(res.data);
+      setKeys({ deepseek_api_key: "", doubao_api_key: "", openai_api_key: "" });
       setMessage("保存成功");
     } catch {
       setMessage("保存失败，请重试");
@@ -99,8 +91,13 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 {f.label}
               </label>
+              {saved[f.key] && (
+                <p className="mb-1 text-xs text-gray-400">
+                  当前：{saved[f.key]}
+                </p>
+              )}
               <input
-                type="text"
+                type="password"
                 value={keys[f.key]}
                 onChange={(e) => setKeys((prev) => ({ ...prev, [f.key]: e.target.value }))}
                 placeholder={f.placeholder}

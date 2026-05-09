@@ -46,7 +46,11 @@ class ApiKeysRequest(BaseModel):
 @router.get("/config/keys")
 async def get_keys():
     keys = get_user_api_keys()
-    return keys
+    return {
+        "deepseek_api_key": _mask(keys["deepseek_api_key"]),
+        "doubao_api_key": _mask(keys["doubao_api_key"]),
+        "openai_api_key": _mask(keys["openai_api_key"]),
+    }
 
 
 @router.post("/config/keys")
@@ -60,7 +64,7 @@ async def save_keys(req: ApiKeysRequest):
     cfg["api_keys"] = current
     _save_config(cfg)
     return {
-        "deepseek_api_key": current.get("deepseek_api_key", ""),
-        "doubao_api_key": current.get("doubao_api_key", ""),
-        "openai_api_key": current.get("openai_api_key", ""),
+        "deepseek_api_key": _mask(current.get("deepseek_api_key", "")),
+        "doubao_api_key": _mask(current.get("doubao_api_key", "")),
+        "openai_api_key": _mask(current.get("openai_api_key", "")),
     }
