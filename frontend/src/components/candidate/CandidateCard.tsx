@@ -13,7 +13,7 @@ interface CandidateCardProps {
 
 export default function CandidateCard({
   candidate,
-  sessionId,
+  sessionId: _sessionId,
   onRegenerateImage,
   onIterate: _onIterate,
   onImageIterate,
@@ -60,7 +60,7 @@ export default function CandidateCard({
       // Use null for synthetic entries so backend falls back to latest real image
       const realId = baseImageId === "__quick__" || baseImageId === "__current__" ? null : baseImageId;
       await onImageIterate(realId, feedback.trim());
-      setFeedbackTexts((prev) => ({ ...prev, [baseImageId]: "" }));
+      if (baseImageId != null) setFeedbackTexts((prev) => ({ ...prev, [baseImageId]: "" }));
       onIterateSuccess();
     } catch {
       // Error handled by hook

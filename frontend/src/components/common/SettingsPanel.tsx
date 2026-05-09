@@ -17,7 +17,7 @@ interface KeyField {
 const KEY_FIELDS: KeyField[] = [
   { key: "deepseek_api_key", label: "DeepSeek API Key", placeholder: "sk-..." },
   { key: "doubao_api_key", label: "豆包 API Key", placeholder: "留空则使用默认配置" },
-  { key: "openai_api_key", label: "OpenAI API Key", placeholder: "sk-..." },
+  // { key: "openai_api_key", label: "OpenAI API Key", placeholder: "sk-..." },
 ];
 
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
@@ -32,7 +32,13 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     apiClient.get("/config/keys").then((res) => {
-      setMasked(res.data);
+      const data = res.data as MaskedKeys;
+      setMasked(data);
+      const prefilled: Record<string, string> = {};
+      for (const f of KEY_FIELDS) {
+        prefilled[f.key] = data[f.key] || "";
+      }
+      setKeys(prefilled);
     });
   }, []);
 
@@ -42,8 +48,9 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
     try {
       const payload: Record<string, string> = {};
       for (const f of KEY_FIELDS) {
-        if (keys[f.key].trim()) {
-          payload[f.key] = keys[f.key].trim();
+        const val = keys[f.key].trim();
+        if (val) {
+          payload[f.key] = val;
         }
       }
       if (Object.keys(payload).length === 0) {
@@ -52,8 +59,13 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
         return;
       }
       const res = await apiClient.post("/config/keys", payload);
-      setMasked(res.data);
-      setKeys({ deepseek_api_key: "", doubao_api_key: "", openai_api_key: "" });
+      const data = res.data as MaskedKeys;
+      setMasked(data);
+      const prefilled: Record<string, string> = {};
+      for (const f of KEY_FIELDS) {
+        prefilled[f.key] = data[f.key] || "";
+      }
+      setKeys(prefilled);
       setMessage("保存成功");
     } catch {
       setMessage("保存失败，请重试");
@@ -87,13 +99,8 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 {f.label}
               </label>
-              {masked && masked[f.key] && (
-                <p className="mb-1 text-xs text-gray-400">
-                  当前：{masked[f.key]}
-                </p>
-              )}
               <input
-                type="password"
+                type="text"
                 value={keys[f.key]}
                 onChange={(e) => setKeys((prev) => ({ ...prev, [f.key]: e.target.value }))}
                 placeholder={f.placeholder}

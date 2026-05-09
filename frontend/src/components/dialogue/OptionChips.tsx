@@ -7,7 +7,7 @@ interface OptionChipsProps {
   onMultiConfirm: (selected: string[]) => void;
 }
 
-export default function OptionChips({ options, disabled = false, onSelect, onMultiConfirm }: OptionChipsProps) {
+export default function OptionChips({ options, disabled = false, onSelect, onMultiConfirm: _onMultiConfirm }: OptionChipsProps) {
   const [confirmed, setConfirmed] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
   const [customText, setCustomText] = useState("");

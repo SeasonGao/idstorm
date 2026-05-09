@@ -11,7 +11,7 @@ interface CandidatePageProps {
 
 const IMAGE_MODELS: { value: ImageModel; label: string }[] = [
   { value: "doubao", label: "豆包 Seedream" },
-  { value: "openai", label: "OpenAI GPT-Image" },
+  // { value: "openai", label: "OpenAI GPT-Image" },
 ];
 
 export default function CandidatePage({

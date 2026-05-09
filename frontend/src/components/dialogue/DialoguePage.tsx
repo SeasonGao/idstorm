@@ -11,7 +11,7 @@ interface DialoguePageProps {
 }
 
 export default function DialoguePage({ onComplete }: DialoguePageProps) {
-  const { sessionId, status, createSession, resetSession } = useSession();
+  const { sessionId, createSession, resetSession } = useSession();
   const { messages, setMessages, isStreaming, dimensionProgress, setDimensionProgress, dialogueComplete, setDialogueComplete, sendMessage, skipToNext } = useChat((code) => {
     if (code === "not_found") {
       resetSession();
