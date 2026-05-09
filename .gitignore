@@ -33,6 +33,7 @@ Thumbs.db
 .omc/logs/
 
 backend/logs/
+backend/user_config.json
 
 
 
