@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.models.dialogue import Message
+from app.routers.config import get_user_api_keys
 from app.services.dialogue_engine import (
     chat as dialogue_chat,
     force_advance_dimension,
@@ -52,7 +53,7 @@ async def send_message(req: DialogueRequest):
     session.messages.append(user_msg)
     session_store.update(req.session_id, session)
 
-    result = await dialogue_chat(session, req.content)
+    result = await dialogue_chat(session, req.content, api_keys=get_user_api_keys())
 
     if "code" in result:
         raise HTTPException(status_code=502, detail=result["message"])
@@ -100,7 +101,7 @@ async def _handle_skip_to_next(session_id: str, session) -> DialogueResponse:
     session.messages.append(transition_msg)
     session_store.update(session_id, session)
 
-    result = await dialogue_chat(session, transition_msg.content)
+    result = await dialogue_chat(session, transition_msg.content, api_keys=get_user_api_keys())
 
     if "code" in result:
         raise HTTPException(status_code=502, detail=result["message"])

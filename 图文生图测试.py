@@ -1,7 +1,7 @@
 import os
 import base64
 import httpx
-ARK_API_KEY = "ark-2385568a-ea0d-4d59-9eba-c2fc4dd56d49-3652d"
+ARK_API_KEY = ""
 
 URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
 

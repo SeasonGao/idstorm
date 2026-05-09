@@ -1,0 +1,13 @@
+.git
+.omc
+node_modules
+frontend/node_modules
+frontend/dist
+backend/__pycache__
+backend/**/__pycache__
+backend/**/*.pyc
+backend/.env
+backend/data
+backend/.generated_images
+backend/logs
+*.md

@@ -11,7 +11,7 @@ import time
 import asyncio
 from openai import OpenAI
 
-API_KEY = "sk-71082a31675d442aa21191d5826427e8"
+API_KEY = ""
 BASE_URL = "https://api.deepseek.com"
 MODEL = "deepseek-v4-flash"
 

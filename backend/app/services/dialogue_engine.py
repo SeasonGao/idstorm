@@ -277,7 +277,9 @@ async def _call_model(
     model: str,
     temperature: float,
     response_format: dict | None = None,
+    api_keys: dict | None = None,
 ) -> str:
+    api_key = (api_keys or {}).get("deepseek_api_key") or settings.deepseek_api_key
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -290,7 +292,7 @@ async def _call_model(
 
     def _call():
         client = OpenAI(
-            api_key=settings.deepseek_api_key,
+            api_key=api_key,
             base_url=settings.deepseek_base_url,
         )
         return client.chat.completions.create(**payload)
@@ -343,7 +345,7 @@ class _RequestLogger:
 
 
 async def _run_decision_node(
-    session: Session, request_id: str, req_log: _RequestLogger
+    session: Session, request_id: str, req_log: _RequestLogger, api_keys: dict | None = None
 ) -> tuple[str, str]:
     label = DIMENSION_LABELS.get(session.current_dimension, "")
     system_content = SYSTEM_PROMPT_DECISION.replace(
@@ -362,7 +364,7 @@ async def _run_decision_node(
     ]
 
     raw = await _call_model(
-        messages, "deepseek-v4-flash", 0.1, response_format={"type": "json_object"}
+        messages, "deepseek-v4-flash", 0.1, response_format={"type": "json_object"}, api_keys=api_keys
     )
 
     try:
@@ -378,7 +380,7 @@ async def _run_decision_node(
 
 
 async def _run_summary_node(
-    session: Session, request_id: str, req_log: _RequestLogger
+    session: Session, request_id: str, req_log: _RequestLogger, api_keys: dict | None = None
 ) -> str | None:
     label = DIMENSION_LABELS.get(session.current_dimension, "")
     system_content = SYSTEM_PROMPT_SUMMARY.replace(
@@ -397,7 +399,7 @@ async def _run_summary_node(
     ]
 
     raw = await _call_model(
-        messages, "deepseek-v4-flash", 0.1, response_format={"type": "json_object"}
+        messages, "deepseek-v4-flash", 0.1, response_format={"type": "json_object"}, api_keys=api_keys
     )
 
     try:
@@ -412,7 +414,7 @@ async def _run_summary_node(
 
 
 async def _run_dialogue_node(
-    session: Session, request_id: str, req_log: _RequestLogger
+    session: Session, request_id: str, req_log: _RequestLogger, api_keys: dict | None = None
 ) -> str | None:
     api_messages = _build_dialogue_messages(session)
 
@@ -422,6 +424,7 @@ async def _run_dialogue_node(
                 [dict(m) for m in api_messages],
                 "deepseek-v4-flash",
                 0.3,
+                api_keys=api_keys,
             )
             if raw.strip():
                 req_log.append("dialogue", api_messages, raw)
@@ -435,7 +438,7 @@ async def _run_dialogue_node(
 
 
 async def _run_option_node(
-    question: str, request_id: str, req_log: _RequestLogger
+    question: str, request_id: str, req_log: _RequestLogger, api_keys: dict | None = None
 ) -> list[str] | None:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT_OPTIONS},
@@ -449,6 +452,7 @@ async def _run_option_node(
                 "deepseek-v4-flash",
                 0.1,
                 response_format={"type": "json_object"},
+                api_keys=api_keys,
             )
             parsed = json.loads(raw)
             options = parsed.get("options")
@@ -465,7 +469,7 @@ async def _run_option_node(
     return None
 
 
-async def chat(session: Session, user_message: str) -> dict[str, Any]:
+async def chat(session: Session, user_message: str, api_keys: dict | None = None) -> dict[str, Any]:
     request_id = _next_request_id()
     req_log = _RequestLogger(
         request_id,
@@ -486,7 +490,7 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
 
     if needs_decision:
         try:
-            decision, reason = await _run_decision_node(session, request_id, req_log)
+            decision, reason = await _run_decision_node(session, request_id, req_log, api_keys=api_keys)
             logger.info(
                 "[DECISION] dimension=%s decision=%s reason=%s",
                 session.current_dimension, decision, reason,
@@ -500,7 +504,7 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
         completed_dim = session.current_dimension
 
         try:
-            summary = await _run_summary_node(session, request_id, req_log)
+            summary = await _run_summary_node(session, request_id, req_log, api_keys=api_keys)
         except Exception:
             logger.exception("[SUMMARY] Error, using fallback")
             summary = None
@@ -544,7 +548,7 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
 
     # ── Node 3: Dialogue ──
     try:
-        question = await _run_dialogue_node(session, request_id, req_log)
+        question = await _run_dialogue_node(session, request_id, req_log, api_keys=api_keys)
     except Exception:
         logger.exception("[DIALOGUE] Error")
         req_log.flush({"code": "internal_error", "message": "对话服务暂时不可用，请重试"})
@@ -557,7 +561,7 @@ async def chat(session: Session, user_message: str) -> dict[str, Any]:
     # ── Node 4: Option Generation ──
     options = None
     try:
-        options = await _run_option_node(question, request_id, req_log)
+        options = await _run_option_node(question, request_id, req_log, api_keys=api_keys)
     except Exception:
         logger.exception("[OPTIONS] Error, proceeding without options")
 
